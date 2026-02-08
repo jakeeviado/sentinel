@@ -21,6 +21,8 @@ var (
 	failOnDetect bool
 	excludePaths []string
 	gitDiff      string
+	trainingData bool
+	label        string
 )
 
 var scanCmd = &cobra.Command{
@@ -52,6 +54,8 @@ func init() {
 	scanCmd.Flags().BoolVar(&failOnDetect, "fail-on-detection", false, "exit with error code if AI code detected")
 	scanCmd.Flags().StringSliceVar(&excludePaths, "exclude", []string{}, "paths to exclude from scanning")
 	scanCmd.Flags().StringVar(&gitDiff, "git-diff", "", "scan only files changed in git diff against specified branch")
+	scanCmd.Flags().BoolVar(&trainingData, "collect", false, "save scan results to local training CSV")
+	scanCmd.Flags().StringVar(&label, "label", "", "label for training data: 'ai' or 'human'")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -96,6 +100,19 @@ func runScan(cmd *cobra.Command, args []string) error {
 	results, err := det.ScanFiles(files)
 	if err != nil {
 		return fmt.Errorf("scan failed: %w", err)
+	}
+
+	if trainingData {
+		if label != "ai" && label != "human" {
+			return fmt.Errorf("please specify --label as 'ai' or 'human' when using --collect")
+		}
+
+		isAI := (label == "ai")
+		if err := det.LogTrainingData(results, isAI); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to log training data: %v\n", err)
+		} else {
+			fmt.Println("Successfully logged results to sentinel_training.csv")
+		}
 	}
 
 	// REPORT RESULTS

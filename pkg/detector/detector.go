@@ -1,13 +1,32 @@
 package detector
 
 import (
+	"encoding/csv"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 
 	"sentinel/pkg/analyzer"
 	"sentinel/pkg/models"
 )
+
+var languageIDMap = map[string]string{
+	"unknown":    "0",
+	"python":     "1",
+	"java":       "2",
+	"javascript": "3",
+	"typescript": "4",
+	"go":         "5",
+	"rust":       "6",
+	"cpp":        "7",
+	"c":          "8",
+	"ruby":       "9",
+	"php":        "10",
+	"csharp":     "11",
+	"kotlin":     "12",
+	"swift":      "13",
+}
 
 type Config struct {
 	Threshold    float64
@@ -57,7 +76,7 @@ func (d *Detector) ScanFiles(files []string) (*ScanResults, error) {
 		wg.Add(1)
 		go func(path string) {
 			defer wg.Done()
-			semaphore <- struct{}{}  
+			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
 
 			result := d.scanFile(path)
@@ -94,6 +113,12 @@ func (d *Detector) scanFile(path string) FileResult {
 
 	result.Language = detectLanguage(path)
 
+	info, err := os.Stat(path)
+	if err != nil || info.Size() == 0 || info.IsDir() {
+		result.Error = os.ErrInvalid
+		return result
+	}
+
 	content, err := os.ReadFile(path)
 	if err != nil {
 		result.Error = err
@@ -113,22 +138,13 @@ func (d *Detector) calculateScore(signals []models.Signal) float64 {
 		return 0.0
 	}
 
-	totalWeight := 0.0
-	weightedSum := 0.0
-
+	maxScore := 0.0
 	for _, signal := range signals {
-		if signal.Score > 0.0 {
-			weight := 1.0
-			weightedSum += signal.Score * weight
-			totalWeight += weight
+		if signal.Score > maxScore {
+			maxScore = signal.Score
 		}
 	}
-
-	if totalWeight == 0 {
-		return 0.0
-	}
-
-	return weightedSum / totalWeight
+	return maxScore
 }
 
 func (r *ScanResults) HasDetections(threshold float64) bool {
@@ -163,4 +179,45 @@ func detectLanguage(path string) string {
 		return lang
 	}
 	return "unknown"
+}
+
+/*
+ * LogTrainingData now includes Language ID as the first column
+ */
+func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
+	file, err := os.OpenFile("sentinel_training.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	writer := csv.NewWriter(file)
+	defer writer.Flush()
+
+	labelStr := "0"
+	if isAI {
+		labelStr = "1"
+	}
+
+	for _, f := range results.Files {
+		if f.Error != nil || len(f.Signals) == 0 {
+			continue
+		}
+
+		langID := languageIDMap[f.Language]
+		if langID == "" {
+			langID = "0"
+		}
+
+		row := []string{langID}
+		for _, s := range f.Signals {
+			row = append(row, strconv.FormatFloat(s.Score, 'f', 4, 64))
+		}
+		row = append(row, labelStr)
+
+		if err := writer.Write(row); err != nil {
+			return err
+		}
+	}
+	return nil
 }
