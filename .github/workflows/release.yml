@@ -1,0 +1,80 @@
+name: RELEASE
+
+on:
+    push:
+        tags:
+            - "v*.*.*"
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+jobs:
+    build:
+        name: Build Release Binaries
+        runs-on: ubuntu-latest
+        strategy:
+            matrix:
+                goos: [linux, darwin, windows]
+                goarch: [amd64, arm64]
+                exclude:
+                    - goos: windows
+                      goarch: arm64
+        steps:
+            - name: Check out code
+              uses: actions/checkout@v4
+
+            - name: Set up Go
+              uses: actions/setup-go@v4
+              with:
+                  go-version: "1.21"
+
+            - name: Get version
+              id: version
+              run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+            - name: Build
+              env:
+                  GOOS: ${{ matrix.goos }}
+                  GOARCH: ${{ matrix.goarch }}
+                  VERSION: ${{ steps.version.outputs.VERSION }}
+              run: |
+                  mkdir -p bin
+                  if [ "$GOOS" = "windows" ]; then
+                    go build -ldflags "-X main.Version=$VERSION" -o bin/sentinel-${{ matrix.goos }}-${{ matrix.goarch }}.exe
+                  else
+                    go build -ldflags "-X main.Version=$VERSION" -o bin/sentinel-${{ matrix.goos }}-${{ matrix.goarch }}
+                  fi
+
+            - name: Upload artifacts
+              uses: actions/upload-artifact@v4
+              with:
+                  name: sentinel-${{ matrix.goos }}-${{ matrix.goarch }}
+                  path: bin/*
+
+    release:
+        name: Create GitHub Release
+        needs: build
+        runs-on: ubuntu-latest
+        steps:
+            - name: Check out code
+              uses: actions/checkout@v4
+
+            - name: Download all artifacts
+              uses: actions/download-artifact@v4
+              with:
+                  path: artifacts
+                  merge-multiple: true
+
+            - name: Display artifacts
+              run: ls -R artifacts
+
+            - name: Create Release
+              uses: softprops/action-gh-release@v1
+              with:
+                  files: artifacts/*
+                  draft: false
+                  prerelease: false
+                  generate_release_notes: true
+              env:
+                  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
