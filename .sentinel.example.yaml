@@ -1,0 +1,45 @@
+# ⌀ Sentinel Configuration Example
+# Copy this file to a .sentinel.yaml and customize as needed
+
+# Detection threshold (0.0 - 1.0)
+# Files scoring above this threshold are flagged as AI-generated
+threshold: 0.70
+
+# Languages to scan (leave empty to scan all supported languages)
+languages:
+    - python
+    - java
+    - javascript
+    - typescript
+    - go
+
+# Paths to exclude from scanning (glob patterns supported)
+exclude:
+    - "vendor/*"
+    - "node_modules/*"
+    - ".git/*"
+    - "*.min.js"
+    - "*.test.js"
+    - "*.spec.py"
+    - "*_test.go"
+    - "dist/*"
+    - "build/*"
+
+# Verbose output (show detailed signal analysis)
+verbose: false
+
+# JSON output format
+json: false
+
+# Fail build on detection (exit with error code)
+fail_on_detection: true
+
+# Signal weights (advanced configs)
+# Adjust the importance of different detection signals
+# signal_weights:
+#   comment_density: 1.0
+#   generic_naming: 1.2
+#   repetitive_patterns: 0.8
+#   code_complexity: 1.0
+#   formatting_consistency: 0.9
+#   boilerplate_patterns: 1.1

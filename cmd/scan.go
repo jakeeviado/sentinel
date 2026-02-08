@@ -1,0 +1,204 @@
+package cmd
+
+import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+
+	"sentinel/pkg/detector"
+	"sentinel/pkg/reporter"
+
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+)
+
+var (
+	scanPath     string
+	languages    []string
+	threshold    float64
+	failOnDetect bool
+	excludePaths []string
+	gitDiff      string
+)
+
+var scanCmd = &cobra.Command{
+	Use:   "scan",
+	Short: "Scan code for AI-generated patterns",
+	Long: `Scan source code files to detect patterns indicative of AI generation.
+
+Examples:
+  # Scan current directory
+  sentinel scan --path .
+
+  # Scan with specific languages
+  sentinel scan --path ./src --languages python,java,javascript
+
+  # Scan git diff against main branch
+  sentinel scan --git-diff origin/main --threshold 0.75
+
+  # Fail CI build if AI code detected
+  sentinel scan --path . --fail-on-detection --threshold 0.8`,
+	RunE: runScan,
+}
+
+func init() {
+	rootCmd.AddCommand(scanCmd)
+
+	scanCmd.Flags().StringVarP(&scanPath, "path", "p", ".", "path to scan")
+	scanCmd.Flags().StringSliceVarP(&languages, "languages", "l", []string{}, "languages to scan (e.g., python,java,go)")
+	scanCmd.Flags().Float64VarP(&threshold, "threshold", "t", 0.7, "detection threshold (0.0-1.0)")
+	scanCmd.Flags().BoolVar(&failOnDetect, "fail-on-detection", false, "exit with error code if AI code detected")
+	scanCmd.Flags().StringSliceVar(&excludePaths, "exclude", []string{}, "paths to exclude from scanning")
+	scanCmd.Flags().StringVar(&gitDiff, "git-diff", "", "scan only files changed in git diff against specified branch")
+}
+
+func runScan(cmd *cobra.Command, args []string) error {
+	verbose := viper.GetBool("verbose")
+	jsonOutput := viper.GetBool("json")
+
+	if verbose {
+		fmt.Fprintf(os.Stderr, "Scanning path: %s\n", scanPath)
+		fmt.Fprintf(os.Stderr, "Threshold: %.2f\n", threshold)
+		if len(languages) > 0 {
+			fmt.Fprintf(os.Stderr, "Languages: %v\n", languages)
+		}
+	}
+
+	det := detector.New(detector.Config{
+		Threshold:    threshold,
+		Languages:    languages,
+		ExcludePaths: excludePaths,
+		Verbose:      verbose,
+	})
+
+	var files []string
+	var err error
+
+	if gitDiff != "" {
+		files, err = getGitDiffFiles(gitDiff)
+		if err != nil {
+			return fmt.Errorf("failed to get git diff files: %w", err)
+		}
+	} else {
+		files, err = collectFiles(scanPath, excludePaths)
+		if err != nil {
+			return fmt.Errorf("failed to collect files: %w", err)
+		}
+	}
+
+	if verbose {
+		fmt.Fprintf(os.Stderr, "Found %d files to scan\n", len(files))
+	}
+
+	// SCAN FILES
+	results, err := det.ScanFiles(files)
+	if err != nil {
+		return fmt.Errorf("scan failed: %w", err)
+	}
+
+	// REPORT RESULTS
+	rep := reporter.New(reporter.Config{
+		JSONOutput: jsonOutput,
+		Verbose:    verbose,
+		Threshold:  threshold,
+	})
+
+	if err := rep.Report(results); err != nil {
+		return fmt.Errorf("failed to generate report: %w", err)
+	}
+
+	// CHECK IF WE SHOULD FAIL THE BUILD :(
+	if failOnDetect && results.HasDetections(threshold) {
+		return fmt.Errorf("AI-generated code detected above threshold %.2f", threshold)
+	}
+
+	return nil
+}
+
+func collectFiles(root string, exclude []string) ([]string, error) {
+	var files []string
+
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// SKIP EXCLUDED PATHS
+		for _, ex := range exclude {
+			if matched, _ := filepath.Match(ex, path); matched {
+				if info.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
+
+		// SKIP COMMON DIRECTORIES
+		if info.IsDir() {
+			name := info.Name()
+			if name == ".git" || name == "node_modules" || name == "vendor" ||
+				name == "target" || name == "build" || name == "dist" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		// ADD SUPPORTED SOURCE SILES
+		if isSupportedFile(path) {
+			files = append(files, path)
+		}
+
+		return nil
+	})
+
+	return files, err
+}
+
+func isSupportedFile(path string) bool {
+	ext := filepath.Ext(path)
+	supportedExts := map[string]bool{
+		".py":    true, // Python
+		".java":  true, // Java
+		".js":    true, // JavaScript
+		".ts":    true, // TypeScript
+		".go":    true, // Go
+		".rs":    true, // Rust
+		".cpp":   true, // C++
+		".c":     true, // C
+		".h":     true, // C/C++ headers
+		".rb":    true, // Ruby
+		".php":   true, // PHP
+		".cs":    true, // C#
+		".kt":    true, // Kotlin
+		".swift": true, // Swift
+	}
+	return supportedExts[ext]
+}
+
+func getGitDiffFiles(branch string) ([]string, error) {
+	cmd := exec.Command("git", "diff", "--name-only", branch)
+	output, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("git diff command failed: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	var files []string
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		if _, err := os.Stat(line); err == nil {
+			if isSupportedFile(line) {
+				files = append(files, line)
+			}
+		}
+	}
+
+	return files, nil
+}
