@@ -33,6 +33,8 @@ func TestDetectLanguage(t *testing.T) {
 		{"app.js", "javascript"},
 		{"Main.java", "java"},
 		{"test.rs", "rust"},
+		{"script.rb", "ruby"},
+		{"Program.cs", "csharp"},
 		{"unknown.xyz", "unknown"},
 	}
 
@@ -67,20 +69,20 @@ func TestCalculateScore(t *testing.T) {
 			expected: 0.8,
 		},
 		{
-			name: "multiple signals",
+			name: "multiple signals - picks maximum",
 			signals: []models.Signal{
 				{Name: "test1", Score: 0.6},
-				{Name: "test2", Score: 0.8},
+				{Name: "test2", Score: 0.9},
 				{Name: "test3", Score: 0.4},
 			},
-			expected: 0.6,
+			expected: 0.9,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := detector.calculateScore(tt.signals)
-			if result < tt.expected-0.01 || result > tt.expected+0.01 {
+			if result != tt.expected {
 				t.Errorf("calculateScore() = %f, want %f", result, tt.expected)
 			}
 		})
@@ -102,5 +104,19 @@ func TestScanResultsHasDetections(t *testing.T) {
 
 	if results.HasDetections(0.9) {
 		t.Error("Expected HasDetections(0.9) to be false")
+	}
+}
+
+func TestLanguageIDMapConsistency(t *testing.T) {
+	testLangs := []string{"python", "go", "java", "rust", "unknown"}
+
+	for _, lang := range testLangs {
+		id, ok := languageIDMap[lang]
+		if !ok {
+			t.Errorf("Language %s found by detectLanguage but missing from languageIDMap", lang)
+		}
+		if id == "" {
+			t.Errorf("Language %s has an empty ID in languageIDMap", lang)
+		}
 	}
 }
