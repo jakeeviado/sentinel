@@ -181,9 +181,6 @@ func detectLanguage(path string) string {
 	return "unknown"
 }
 
-/*
- * LogTrainingData now includes Language ID as the first column
- */
 func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
 	file, err := os.OpenFile("sentinel_training.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
