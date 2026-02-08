@@ -35,8 +35,12 @@ func init() {
 	rootCmd.PersistentFlags().Bool("verbose", false, "verbose output")
 	rootCmd.PersistentFlags().Bool("json", false, "output results in JSON format")
 
-	viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose"))
-	viper.BindPFlag("json", rootCmd.PersistentFlags().Lookup("json"))
+	if err := viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose")); err != nil {
+		fmt.Fprintf(os.Stderr, "Error binding verbose flag: %v\n", err)
+	}
+	if err := viper.BindPFlag("json", rootCmd.PersistentFlags().Lookup("json")); err != nil {
+		fmt.Fprintf(os.Stderr, "Error binding json flag: %v\n", err)
+	}
 }
 
 func initConfig() {
