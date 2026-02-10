@@ -16,15 +16,12 @@ jobs:
               uses: actions/setup-go@v4
               with:
                   go-version: "1.21"
-
             - name: Check out code
               uses: actions/checkout@v4
             - name: Download dependencies
               run: go mod download
-
             - name: Run tests
               run: go test -v -race -coverprofile=coverage.out ./...
-
             - name: Upload coverage
               uses: codecov/codecov-action@v4
               with:
@@ -40,7 +37,6 @@ jobs:
               uses: actions/setup-go@v4
               with:
                   go-version: "1.21"
-
             - name: golangci-lint
               uses: golangci/golangci-lint-action@v6
               with:
@@ -52,11 +48,11 @@ jobs:
         needs: [test, lint]
         strategy:
             matrix:
-                goos: [linux, windows]
-                goarch: [amd64, arm64]
-                exclude:
+                include:
+                    - goos: linux
+                      goarch: amd64
                     - goos: windows
-                      goarch: arm64
+                      goarch: amd64
         steps:
             - name: Check out code
               uses: actions/checkout@v4
@@ -64,7 +60,6 @@ jobs:
               uses: actions/setup-go@v4
               with:
                   go-version: "1.21"
-
             - name: Build
               env:
                   GOOS: ${{ matrix.goos }}
@@ -75,7 +70,6 @@ jobs:
                   else
                     go build -o bin/sentinel-${{ matrix.goos }}-${{ matrix.goarch }}
                   fi
-
             - name: Upload artifacts
               uses: actions/upload-artifact@v4
               with:
