@@ -23,6 +23,10 @@ var (
 	gitDiff      string
 	trainingData bool
 	label        string
+	modelPath    string
+	noML         bool
+	mlOnly       bool
+	mlWeight     float64
 )
 
 var scanCmd = &cobra.Command{
@@ -56,6 +60,10 @@ func init() {
 	scanCmd.Flags().StringVar(&gitDiff, "git-diff", "", "scan only files changed in git diff against specified branch")
 	scanCmd.Flags().BoolVar(&trainingData, "collect", false, "save scan results to local training CSV")
 	scanCmd.Flags().StringVar(&label, "label", "", "label for training data: 'ai' or 'human'")
+	scanCmd.Flags().StringVar(&modelPath, "model", "", "path to ONNX model file")
+	scanCmd.Flags().BoolVar(&noML, "no-ml", false, "disable ML inference (heuristics only)")
+	scanCmd.Flags().BoolVar(&mlOnly, "ml-only", false, "use ML only (fail if model not available)")
+	scanCmd.Flags().Float64Var(&mlWeight, "ml-weight", 0.7, "weight given to ML score (0.0-1.0)")
 }
 
 func runScan(cmd *cobra.Command, args []string) error {
@@ -75,6 +83,10 @@ func runScan(cmd *cobra.Command, args []string) error {
 		Languages:    languages,
 		ExcludePaths: excludePaths,
 		Verbose:      verbose,
+		ModelPath:    modelPath,
+		UseML:        !noML && modelPath != "",
+		MLWeight:     mlWeight,
+		MLOnly:       mlOnly,
 	})
 
 	var files []string
