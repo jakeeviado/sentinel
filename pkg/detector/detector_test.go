@@ -49,8 +49,6 @@ func TestDetectLanguage(t *testing.T) {
 }
 
 func TestCalculateScore(t *testing.T) {
-	detector := New(Config{Threshold: 0.7})
-
 	tests := []struct {
 		name     string
 		signals  []models.Signal
@@ -81,9 +79,9 @@ func TestCalculateScore(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := detector.calculateScore(tt.signals)
+			result := calculateMaxScore(tt.signals)
 			if result != tt.expected {
-				t.Errorf("calculateScore() = %f, want %f", result, tt.expected)
+				t.Errorf("calculateMaxScore() = %f, want %f", result, tt.expected)
 			}
 		})
 	}

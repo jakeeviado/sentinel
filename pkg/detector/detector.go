@@ -2,12 +2,14 @@ package detector
 
 import (
 	"encoding/csv"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
 	"sync"
 
 	"sentinel/pkg/analyzer"
+	"sentinel/pkg/ml"
 	"sentinel/pkg/models"
 )
 
@@ -33,11 +35,17 @@ type Config struct {
 	Languages    []string
 	ExcludePaths []string
 	Verbose      bool
+	// MACHINE LEARNING CONFIG
+	ModelPath string
+	UseML     bool
+	MLWeight  float64
+	MLOnly    bool
 }
 
 type Detector struct {
-	config   Config
-	analyzer *analyzer.Analyzer
+	config     Config
+	analyzer   *analyzer.Analyzer
+	mlDetector *ml.MLDetector
 }
 
 type FileResult struct {
@@ -46,6 +54,11 @@ type FileResult struct {
 	Signals  []models.Signal
 	Language string
 	Error    error
+	// MACHINE LEARNING SPECIFIC FIELDS
+	MLScore        float64
+	HeuristicScore float64
+	UsedML         bool
+	Confidence     float64
 }
 
 type ScanResults struct {
@@ -53,19 +66,42 @@ type ScanResults struct {
 	TotalFiles    int
 	DetectedFiles int
 	AverageScore  float64
+	UsedML        bool
 }
 
 func New(config Config) *Detector {
-	return &Detector{
+	detector := &Detector{
 		config:   config,
 		analyzer: analyzer.New(),
 	}
+	if config.UseML && config.ModelPath != "" {
+		mlConfig := ml.DetectionConfig{
+			ModelPath:     config.ModelPath,
+			MLWeight:      config.MLWeight,
+			FallbackMode:  !config.MLOnly,
+			RequireML:     config.MLOnly,
+			MinConfidence: config.Threshold,
+			NumFeatures:   25,
+		}
+		mlDetector, err := ml.NewMLDetector(mlConfig)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: ML initialization failed: %v\n", err)
+			fmt.Fprintf(os.Stderr, "Falling back to heuristics-only mode\n")
+		} else {
+			detector.mlDetector = mlDetector
+			if config.Verbose {
+				fmt.Fprintf(os.Stderr, "ML model loaded: %s\n", config.ModelPath)
+			}
+		}
+	}
+	return detector
 }
 
 func (d *Detector) ScanFiles(files []string) (*ScanResults, error) {
 	results := &ScanResults{
 		Files:      make([]FileResult, 0, len(files)),
 		TotalFiles: len(files),
+		UsedML:     d.mlDetector != nil,
 	}
 
 	resultsChan := make(chan FileResult, len(files))
@@ -115,7 +151,7 @@ func (d *Detector) scanFile(path string) FileResult {
 
 	info, err := os.Stat(path)
 	if err != nil || info.Size() == 0 || info.IsDir() {
-		result.Error = os.ErrInvalid
+		result.Error = fmt.Errorf("invalid file: %w", err)
 		return result
 	}
 
@@ -125,15 +161,42 @@ func (d *Detector) scanFile(path string) FileResult {
 		return result
 	}
 
-	signals := d.analyzer.Analyze(string(content), result.Language)
+	codeString := string(content)
+
+	// Run analysis (get heuristic signals)
+	signals := d.analyzer.Analyze(codeString, result.Language)
 	result.Signals = signals
 
-	result.Score = d.calculateScore(signals)
+	// Calculate heuristic score (using maximum signal score)
+	heuristicScore := calculateMaxScore(signals)
+	result.HeuristicScore = heuristicScore
+
+	// Use ML detection if available
+	if d.mlDetector != nil {
+		mlResult, err := d.mlDetector.Detect(signals, result.Language, codeString)
+		if err != nil {
+			// ML failed, use heuristics only
+			result.Score = heuristicScore
+			result.MLScore = 0.0
+			result.UsedML = false
+		} else {
+			// ML succeeded
+			result.Score = mlResult.FinalScore
+			result.MLScore = mlResult.MLScore
+			result.HeuristicScore = mlResult.HeuristicScore
+			result.UsedML = mlResult.UsedML
+			result.Confidence = mlResult.Confidence
+		}
+	} else {
+		result.Score = heuristicScore
+		result.MLScore = 0.0
+		result.UsedML = false
+	}
 
 	return result
 }
 
-func (d *Detector) calculateScore(signals []models.Signal) float64 {
+func calculateMaxScore(signals []models.Signal) float64 {
 	if len(signals) == 0 {
 		return 0.0
 	}
@@ -181,15 +244,36 @@ func detectLanguage(path string) string {
 	return "unknown"
 }
 
+/*
+ * LOG TRAINING DATA
+ * Saves scan results to CSV for ML training
+ */
 func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
 	file, err := os.OpenFile("sentinel_training.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close file: %v\n", err)
+		}
+	}()
 
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
+
+	info, _ := file.Stat()
+	numFeatures := 25
+	if info.Size() == 0 {
+		header := []string{"language_id"}
+		for i := 1; i <= numFeatures; i++ {
+			header = append(header, fmt.Sprintf("f%d", i))
+		}
+		header = append(header, "label")
+		if err := writer.Write(header); err != nil {
+			return err
+		}
+	}
 
 	labelStr := "0"
 	if isAI {
@@ -197,7 +281,7 @@ func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
 	}
 
 	for _, f := range results.Files {
-		if f.Error != nil || len(f.Signals) == 0 {
+		if f.Error != nil {
 			continue
 		}
 
@@ -206,9 +290,16 @@ func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
 			langID = "0"
 		}
 
+		features := make([]float64, numFeatures)
+		for i, s := range f.Signals {
+			if i < numFeatures {
+				features[i] = s.Score
+			}
+		}
+
 		row := []string{langID}
-		for _, s := range f.Signals {
-			row = append(row, strconv.FormatFloat(s.Score, 'f', 4, 64))
+		for _, val := range features {
+			row = append(row, strconv.FormatFloat(val, 'f', 4, 64))
 		}
 		row = append(row, labelStr)
 
