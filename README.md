@@ -85,25 +85,27 @@ sudo mv sentinel.exe /usr/local/bin/
 ```
 ---
 
-# Quick Start
+# Sample Commands
 
 ```bash
-# SCAN CURRENT DIRECTORY
+./sentinel
+
+# Scan current directory
 ./sentinel scan --path .
 
-# SCAN WITH SPECIFIC TRESHOLD
+# Scan with specific treshold
 ./sentinel scan --path ./src --threshold 0.8
 
-# SCAN SPECIFIC LANGUAGES
+# Scan specific language/s
 ./sentinel scan --path . --languages python,javascript
 
-# JSON OUTPUT
+# Output as JSON
 ./sentinel scan --path . --json
 
-# FAIL BUILD IF AN AI GEN CODE DETECTED
+# Build fails if a possible AI generated code detected
 ./sentinel scan --path . --fail-on-detection --threshold 0.75
 
-# COLLECT TRAINING DATA FOR ML MODELS (directory should be ready inside the project)
+# Collect training data for Machine Learning Model (directory should be ready inside the project)
 ./sentinel scan --path ./examples/ai --collect --label ai
 ./sentinel scan --path ./examples/human --collect --label human
 
@@ -116,9 +118,6 @@ sudo mv sentinel.exe /usr/local/bin/
 # ML only (MACHINE LEARNING MODEL IS REQUIRED!)
 ./sentinel scan --path . --ml-only --verbose
 ```
----
-
-# Usage
 
 **Flags:**
 - `--path, -p` - Path to scan (default: current directory)
