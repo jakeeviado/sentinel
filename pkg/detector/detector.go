@@ -253,7 +253,11 @@ func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close file: %v\n", err)
+		}
+	}()
 
 	writer := csv.NewWriter(file)
 	defer writer.Flush()
@@ -266,7 +270,9 @@ func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
 			header = append(header, fmt.Sprintf("f%d", i))
 		}
 		header = append(header, "label")
-		writer.Write(header)
+		if err := writer.Write(header); err != nil {
+			return err
+		}
 	}
 
 	labelStr := "0"
@@ -297,7 +303,9 @@ func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
 		}
 		row = append(row, labelStr)
 
-		writer.Write(row)
+		if err := writer.Write(row); err != nil {
+			return err
+		}
 	}
 	return nil
 }

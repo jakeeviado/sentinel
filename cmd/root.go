@@ -11,14 +11,22 @@ import (
 var cfgFile string
 
 var rootCmd = &cobra.Command{
-	Use:   "sentinel",
-	Short: "⌀ Sentinel - AI generated code detector for CI/CD pipelines",
-	Long: `Sentinel is a multi-language AI code detection tool that integrates
-seamlessly into your build process and CI/CD pipelines.
+	Use:   "./sentinel",
+	Short: "⌀ Sentinel - The vigilant guard for code authenticity.",
+	Long: `⌀ Sentinel - The vigilant guard for code authenticity.
 
-It analyzes source code to identify patterns indicative of AI-generated content
-using heuristic analysis, statistical methods, and structural patterns.`,
-	Version: "0.1.0",
+SUPPORTED LANGUAGES (early support):
+  Python, Java, JavaScript, TypeScript, Go, Rust, C/C++, Ruby, PHP, C#, Kotlin, Swift
+
+QUICK START:
+  # Scan current directory
+    ./sentinel scan --path .
+
+  # Scan with treshold specified
+    ./sentinel scan --path ./your-target-dir --threshold 0.8
+
+  # CI/CD integration that cancel build if an AI-slop is detected
+    ./sentinel scan --git-diff main --fail-on-detection`,
 }
 
 func Execute() {
@@ -32,8 +40,8 @@ func init() {
 	cobra.OnInitialize(initConfig)
 
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.sentinel.yaml)")
-	rootCmd.PersistentFlags().Bool("verbose", false, "verbose output")
-	rootCmd.PersistentFlags().Bool("json", false, "output results in JSON format")
+	rootCmd.PersistentFlags().Bool("verbose", false, "enable verbose output with detailed logging")
+	rootCmd.PersistentFlags().Bool("json", false, "output results in JSON format for CI/CD integration")
 
 	if err := viper.BindPFlag("verbose", rootCmd.PersistentFlags().Lookup("verbose")); err != nil {
 		fmt.Fprintf(os.Stderr, "Error binding verbose flag: %v\n", err)
