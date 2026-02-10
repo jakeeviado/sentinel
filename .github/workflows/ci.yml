@@ -52,7 +52,7 @@ jobs:
         needs: [test, lint]
         strategy:
             matrix:
-                goos: [linux, darwin, windows]
+                goos: [linux, windows]
                 goarch: [amd64, arm64]
                 exclude:
                     - goos: windows
