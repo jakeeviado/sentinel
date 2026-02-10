@@ -1,3 +1,11 @@
+/*
+ * FORMATS AND DISPLAYS RESULT
+ *
+ * Text output with color coding
+ * JSON output for CI/CD integration
+ * Detailed signal reporting
+ */
+
 package reporter
 
 import (

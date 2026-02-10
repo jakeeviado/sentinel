@@ -1,3 +1,20 @@
+/*
+ * HEURISTIC CHECKS
+ * This are the 'HARDCODED' implementation on how the system
+ * checks to detect and AI generated code.
+ *
+ * Currently, SENTINEL uses this multiple heuristic signals
+ * to detect AI-generated code:
+ *
+ * [1] COMMENT DENSITY
+ * [2] GENERIC NAMING PATTERNS
+ * [3] REPETITIVE PATTERNS
+ * [4] CODE COMPLEXITY
+ * [5] FORMATTING CONSISTENCY
+ * [6] BOILERPALTE PATTERNS
+ *
+ */
+
 package analyzer
 
 import (
@@ -9,29 +26,37 @@ import (
 )
 
 type Analyzer struct {
-	// CONFIGURATION FOR ANALYSIS
+	astAnalyzer *ASTAnalyzer
 }
 
 func New() *Analyzer {
-	return &Analyzer{}
+	return &Analyzer{
+		astAnalyzer: NewAST(),
+	}
 }
 
 func (a *Analyzer) Analyze(code string, language string) []models.Signal {
 	signals := make([]models.Signal, 0)
 
-	// RUN HEURISTIC CHCKS
+	astSignals := a.astAnalyzer.AnalyzeWithAST(code, language)
+	if len(astSignals) > 0 {
+		signals = append(signals, astSignals...)
+		signals = append(signals, a.checkBoilerplatePatterns(code, language))
+		return signals
+	}
+
 	signals = append(signals, a.checkCommentDensity(code))
 	signals = append(signals, a.checkGenericNaming(code))
 	signals = append(signals, a.checkRepetitivePatterns(code))
 	signals = append(signals, a.checkCodeComplexity(code))
 	signals = append(signals, a.checkFormattingConsistency(code))
 	signals = append(signals, a.checkBoilerplatePatterns(code, language))
-
 	return signals
 }
 
 /*
- * Check for excessive comments
+ * COMMENT DENSITY
+ * Check for excessive comments possibly produced by AI
  * (AI often over-comments)
  */
 func (a *Analyzer) checkCommentDensity(code string) models.Signal {
@@ -75,6 +100,7 @@ func (a *Analyzer) checkCommentDensity(code string) models.Signal {
 }
 
 /*
+ * GENERIC NAMING
  * Check for generic variable names
  * (common in AI code)
  */
@@ -121,6 +147,7 @@ func (a *Analyzer) checkGenericNaming(code string) models.Signal {
 }
 
 /*
+ * REPETITIVE PATTERNS
  * Checks repetitive code patterns
  */
 func (a *Analyzer) checkRepetitivePatterns(code string) models.Signal {
@@ -171,6 +198,7 @@ func (a *Analyzer) checkRepetitivePatterns(code string) models.Signal {
 }
 
 /*
+ * CODE COMPLEXITY
  * Checks the code complexity
  * (AI code tends to be simpler but shittier)
  */
@@ -224,6 +252,7 @@ func (a *Analyzer) checkCodeComplexity(code string) models.Signal {
 }
 
 /*
+ * FORMATTING CONSISTENCY
  * Check formatting consistency
  * (AI is very consistent)
  */
@@ -274,6 +303,7 @@ func (a *Analyzer) checkFormattingConsistency(code string) models.Signal {
 }
 
 /*
+ * BOILERPLATE PATTERN
  * Checks for the most common AI boilerplate patterns (more improvements soon)
  */
 func (a *Analyzer) checkBoilerplatePatterns(code string, language string) models.Signal {

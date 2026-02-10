@@ -13,6 +13,15 @@ Sentinel is a multi-language static analysis tool that detects patterns indicati
 - **CI/CD Ready** - GitHub Actions, GitLab CI, Jenkins integration
 - **Configurable** - Adjustable thresholds and language filtering
 
+## Fully Supported Languages
+- Python (.py) - Full pattern detection
+- Java (.java) - Full pattern detection  
+- JavaScript (.js) - Full pattern detection
+
+## Partially Supported Languages
+The following languages use generic heuristics only:
+- TypeScript, Go, Rust, C/C++, Ruby, PHP, C#, Kotlin, Swift
+
 ## Installation
 
 ### Pre-built Binaries
@@ -242,25 +251,6 @@ Detection Threshold:  0.70
   ]
 }
 ```
-
-## Fully Supported Languages
-- Python (.py) - Full pattern detection
-- Java (.java) - Full pattern detection  
-- JavaScript (.js) - Full pattern detection
-
-## Partially Supported Languages
-The following languages use generic heuristics only:
-- TypeScript, Go, Rust, C/C++, Ruby, PHP, C#, Kotlin, Swift
-
-## Future Plans
-
-- [1] Adding more signals including (function/variable naming patterns, documentation style, error handling patterns)
-- [2] Tree-sitter integration for AST-based analysis
-- [3] Git diff scanning support
-- [4] ML-based detection (onnxruntime-go)
-- [5] Build tool plugins (Maven, Gradle, npm)
-- [6] Custom rule definitions
-- [7] Ignore files (`.sentinelignore`)
 
 ## License
 

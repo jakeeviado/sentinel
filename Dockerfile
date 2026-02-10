@@ -1,25 +1,33 @@
-FROM golang:1.21-alpine AS builder
+FROM golang:1.21-bullseye AS builder
+
+RUN apt-get update && apt-get install -y \
+    git \
+    gcc \
+    g++ \
+    make \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
-
-RUN apk add --no-cache git make
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o sentinel .
+RUN CGO_ENABLED=1 GOOS=linux go build -o sentinel .
 
-FROM alpine:latest
+FROM debian:bullseye-slim
 
-RUN apk --no-cache add ca-certificates git
+RUN apt-get update && apt-get install -y \
+    ca-certificates \
+    git \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
 COPY --from=builder /build/sentinel /usr/local/bin/sentinel
 
-RUN addgroup -S sentinel && adduser -S sentinel -G sentinel
+RUN groupadd -r sentinel && useradd -r -g sentinel sentinel
 USER sentinel
 
 ENTRYPOINT ["sentinel"]

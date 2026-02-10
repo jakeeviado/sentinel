@@ -1,3 +1,11 @@
+/*
+ * MAIN DETECTION ENGINE
+ * 
+ * Concurrent file scanning
+ * Score calculation
+ * Result aggregation
+ */
+
 package detector
 
 import (
@@ -5,7 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 
 	"sentinel/pkg/analyzer"
 	"sentinel/pkg/models"
@@ -68,31 +75,11 @@ func (d *Detector) ScanFiles(files []string) (*ScanResults, error) {
 		TotalFiles: len(files),
 	}
 
-	resultsChan := make(chan FileResult, len(files))
-	var wg sync.WaitGroup
-	semaphore := make(chan struct{}, 10)
-
-	for _, file := range files {
-		wg.Add(1)
-		go func(path string) {
-			defer wg.Done()
-			semaphore <- struct{}{}
-			defer func() { <-semaphore }()
-
-			result := d.scanFile(path)
-			resultsChan <- result
-		}(file)
-	}
-	go func() {
-		wg.Wait()
-		close(resultsChan)
-	}()
-
 	totalScore := 0.0
-	for result := range resultsChan {
+	for _, path := range files {
+		result := d.scanFile(path)
 		results.Files = append(results.Files, result)
 		totalScore += result.Score
-
 		if result.Score >= d.config.Threshold {
 			results.DetectedFiles++
 		}
