@@ -1,3 +1,27 @@
+// The package analyzer provides tools for 'heuristic analysis' of code to detect
+// patterns commonly associated with AI-generated content.
+//
+// IMPROVING AND MAINTAINING THE HEURISTIC ANALYSIS
+// When adding a New Detection Signal:
+//
+// sample:
+//
+// func (a *Analyzer) checkNewSignal(code string) detector.Signal {
+//    // The implementation
+//    return detector.Signal{
+//        Name:        "new_signal",
+//        Score:       calculatedScore,
+//        Description: "What this detects",
+//        Evidence:    "Supporting data",
+//    }
+// }
+//
+// Then add to Analyze method
+//
+// sample:
+//
+// signals = append(signals, a.checkNewSignal(code))
+
 package analyzer
 
 import (
@@ -8,32 +32,27 @@ import (
 	"sentinel/pkg/models"
 )
 
-type Analyzer struct {
-	// CONFIGURATION FOR ANALYSIS
-}
+type Analyzer struct{}
 
 func New() *Analyzer {
 	return &Analyzer{}
 }
 
+// Analyze runs the full suite of heuristic checks against the provided code.
+// It returns a slice of 'Signals', each is representing a different detection metric.
 func (a *Analyzer) Analyze(code string, language string) []models.Signal {
 	signals := make([]models.Signal, 0)
-
-	// RUN HEURISTIC CHCKS
 	signals = append(signals, a.checkCommentDensity(code))
 	signals = append(signals, a.checkGenericNaming(code))
 	signals = append(signals, a.checkRepetitivePatterns(code))
 	signals = append(signals, a.checkCodeComplexity(code))
 	signals = append(signals, a.checkFormattingConsistency(code))
 	signals = append(signals, a.checkBoilerplatePatterns(code, language))
-
 	return signals
 }
 
-/*
- * Check for excessive comments
- * (AI often over-comments)
- */
+// This function calculates the ratio of comments to total lines.
+// AI models tend to produce highly documented code, leading to higher density.
 func (a *Analyzer) checkCommentDensity(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	if len(lines) == 0 {
@@ -74,10 +93,8 @@ func (a *Analyzer) checkCommentDensity(code string) models.Signal {
 	}
 }
 
-/*
- * Check for generic variable names
- * (common in AI code)
- */
+// This function identifies the frequency of placeholder variable names
+// like 'temp', 'data', or 'obj', which are common in AI-generated snippets.
 func (a *Analyzer) checkGenericNaming(code string) models.Signal {
 	genericNames := []string{
 		"temp", "tmp", "data", "result", "item", "value", "obj", "elem",
@@ -120,20 +137,17 @@ func (a *Analyzer) checkGenericNaming(code string) models.Signal {
 	}
 }
 
-/*
- * Checks repetitive code patterns
- */
+// This function looks for identical lines of code.
+// High repetition can be a sign of limited variation in generated output.
 func (a *Analyzer) checkRepetitivePatterns(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	if len(lines) < 10 {
 		return models.Signal{Name: "repetitive_patterns", Score: 0.0}
 	}
 
-	// CHECK FOR REPEATED LINES
 	lineCount := make(map[string]int)
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		// SHORT LINES ARE IGNORED
 		if len(trimmed) > 10 {
 			lineCount[trimmed]++
 		}
@@ -170,12 +184,9 @@ func (a *Analyzer) checkRepetitivePatterns(code string) models.Signal {
 	}
 }
 
-/*
- * Checks the code complexity
- * (AI code tends to be simpler but shittier)
- */
+// This function measures control flow density.
+// AI code often follows simpler, more linear paths compared to complex human logic.
 func (a *Analyzer) checkCodeComplexity(code string) models.Signal {
-	// COUNTS CONTROL FLOW STATEMENTS
 	controlFlowKeywords := []string{
 		"if", "else", "switch", "case", "for", "while", "do",
 		"try", "catch", "finally", "throw",
@@ -203,7 +214,6 @@ func (a *Analyzer) checkCodeComplexity(code string) models.Signal {
 	var score float64
 	var description string
 
-	// LOW COMPLEXITY MIGHT INDICATE AN AI-GEN CODE
 	if complexity < 0.05 {
 		score = 0.6
 		description = "Unusually low cyclomatic complexity"
@@ -223,17 +233,14 @@ func (a *Analyzer) checkCodeComplexity(code string) models.Signal {
 	}
 }
 
-/*
- * Check formatting consistency
- * (AI is very consistent)
- */
+// This fucntion evaluates how strictly indentation is followed.
+// Perfect or near-perfect consistency is often a hallmark of programmatic generation.
 func (a *Analyzer) checkFormattingConsistency(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	if len(lines) < 5 {
 		return models.Signal{Name: "formatting_consistency", Score: 0.0}
 	}
 
-	// CHECK INDENTAION CONSISTENCY
 	indentations := make(map[int]int)
 	for _, line := range lines {
 		if len(strings.TrimSpace(line)) == 0 {
@@ -251,7 +258,6 @@ func (a *Analyzer) checkFormattingConsistency(code string) models.Signal {
 		indentations[indent]++
 	}
 
-	// PERFECT CONSISTENCY MIGHT INDICATE AI-GEN CODE
 	uniqueIndents := len(indentations)
 
 	var score float64
@@ -273,9 +279,9 @@ func (a *Analyzer) checkFormattingConsistency(code string) models.Signal {
 	}
 }
 
-/*
- * Checks for the most common AI boilerplate patterns (more improvements soon)
- */
+// This function searches for common AI signatures and standard templates
+// based on the specific programming language.
+// (BAD IMPLEMENTATION FOR NOW)
 func (a *Analyzer) checkBoilerplatePatterns(code string, language string) models.Signal {
 	boilerplatePatterns := map[string][]string{
 		"python": {

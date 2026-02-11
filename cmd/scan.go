@@ -78,15 +78,15 @@ func runScan(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	det := detector.New(detector.Config{
+	det := detector.New(detector.DetectorConfiguration{
 		Threshold:    threshold,
 		Languages:    languages,
 		ExcludePaths: excludePaths,
-		Verbose:      verbose,
+		IsVerbose:    verbose,
 		ModelPath:    modelPath,
 		UseML:        !noML && modelPath != "",
 		MLWeight:     mlWeight,
-		MLOnly:       mlOnly,
+		IsMLOnly:     mlOnly,
 	})
 
 	var files []string

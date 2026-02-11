@@ -5,6 +5,20 @@ import (
 	"sentinel/pkg/models"
 )
 
+const (
+	// DefaultNumFeatures defines the fixed size of the input tensor for the ML model.
+	// This must match the number of features the ONNX model was trained on.
+	DefaultNumFeatures = 25
+
+	// DefaultMLWeight represents the influence of the ML score in the final calculation.
+	// A value of 0.7 means the final score is 70% ML and 30% heuristic signals.
+	DefaultMLWeight = 0.7
+
+	// DefaultMinConfidence is the threshold used to determine if a file is
+	// flagged as AI-generated when ML results are available.
+	DefaultMinConfidence = 0.5
+)
+
 type MLDetector struct {
 	onnxDetector     *ONNXDetector
 	featureExtractor *FeatureExtractor
@@ -21,15 +35,14 @@ type DetectionConfig struct {
 }
 
 func NewMLDetector(config DetectionConfig) (*MLDetector, error) {
-	// Set defaults
 	if config.MLWeight == 0.0 {
-		config.MLWeight = 0.7
+		config.MLWeight = DefaultMLWeight
 	}
 	if config.MinConfidence == 0.0 {
-		config.MinConfidence = 0.5
+		config.MinConfidence = DefaultMinConfidence
 	}
 	if config.NumFeatures == 0 {
-		config.NumFeatures = 25
+		config.NumFeatures = DefaultNumFeatures
 	}
 
 	featureExtractor := NewFeatureExtractor()
