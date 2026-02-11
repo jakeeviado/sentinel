@@ -13,23 +13,6 @@ import (
 	"sentinel/pkg/models"
 )
 
-var languageIDMap = map[string]string{
-	"unknown":    "0",
-	"python":     "1",
-	"java":       "2",
-	"javascript": "3",
-	"typescript": "4",
-	"go":         "5",
-	"rust":       "6",
-	"cpp":        "7",
-	"c":          "8",
-	"ruby":       "9",
-	"php":        "10",
-	"csharp":     "11",
-	"kotlin":     "12",
-	"swift":      "13",
-}
-
 type DetectorConfiguration struct {
 	Threshold    float64
 	Languages    []string
@@ -245,32 +228,23 @@ func detectLanguage(path string) string {
 // LogTrainingData saves scan results to a CSV file for Machine Learning training purposes.
 // It appends to "sentinel_training.csv" and creates the file with a header if it doesn't exist.
 func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
-
 	trainingDataFile, err := os.OpenFile("sentinel_training.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-
 	if err != nil {
 		return err
 	}
-
-	defer func() {
-		if err := trainingDataFile.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to close training data file: %v\n", err)
-		}
-	}()
+	defer trainingDataFile.Close()
 
 	writer := csv.NewWriter(trainingDataFile)
 	defer writer.Flush()
 
+	fe := ml.NewFeatureExtractor()
 	info, _ := trainingDataFile.Stat()
 
-	numFeatures := ml.DefaultNumFeatures
-
 	if info.Size() == 0 {
-		header := []string{"language_id"}
-		for i := 1; i <= numFeatures; i++ {
-			header = append(header, fmt.Sprintf("f%d", i))
-		}
-		header = append(header, "label")
+		dummyMetrics := ml.CodeMetrics{}
+		dummyVector := fe.Extract([]models.Signal{}, "unknown", dummyMetrics)
+
+		header := append(dummyVector.Names, "label")
 		if err := writer.Write(header); err != nil {
 			return err
 		}
@@ -285,22 +259,15 @@ func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
 		if f.Error != nil {
 			continue
 		}
-
-		langID := languageIDMap[f.Language]
-		if langID == "" {
-			langID = "0"
+		content, err := os.ReadFile(f.Path)
+		if err != nil {
+			continue
 		}
-
-		features := make([]float64, numFeatures)
-		for i, s := range f.Signals {
-			if i < numFeatures {
-				features[i] = s.Score
-			}
-		}
-
-		row := []string{langID}
-		for _, val := range features {
-			row = append(row, strconv.FormatFloat(val, 'f', 4, 64))
+		metrics := ml.ExtractCodeMetrics(string(content))
+		vector := fe.Extract(f.Signals, f.Language, metrics)
+		row := make([]string, 0, len(vector.Features)+1)
+		for _, val := range vector.Features {
+			row = append(row, strconv.FormatFloat(float64(val), 'f', 4, 32))
 		}
 		row = append(row, labelStr)
 

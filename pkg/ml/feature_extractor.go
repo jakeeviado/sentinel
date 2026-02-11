@@ -1,8 +1,50 @@
+// Package ml provides the machine learning pipeline for Sentinel, including
+// feature extraction, statistical analysis of heuristic signals, and
+// interfacing with ONNX-based inference engines.
+//
+// # INTEGRATION WITH ANALYZER
+//
+// This package acts as the bridge between the 'analyzer' package and the ML model.
+// While the analyzer produces raw Signal scores (heuristics), the ml package
+// transforms those signals into a fixed-length numerical vector (FeatureVector).
+//
+// MAINTENANCE & SYNCHRONIZATION
+//
+// When a new heuristic signal is added to the Analyzer (e.g., checkNewSignal),
+// it MUST also be added to the FeatureRegistry within this package.
+//
+// Failure to sync the Analyzer and the ML Registry will result in the ML model
+// ignoring the new signal entirely, as it will not be included in the
+// feature vector passed to the ONNX session.
+//
+// # TRAINING WORKFLOW
+//
+// These heuristics are used for training by logging the FeatureVector
+// along with a ground-truth label (AI versus Human) to a dataset.
+// The model learns to associate specific heuristic score patterns—such as
+// high comment density combined with low code complexity—to predict the
+// likelihood of AI generation.
+//
+// # FEATURE SCHEME
+//
+// Features are extracted in a specific, immutable order to maintain compatibility
+// with the underlying ONNX tensors:
+//  1. Language Identification (integer mapping)
+//  2. Heuristic Signal Scores (indexed via the FeatureRegistry)
+//  3. Structural Code Metrics (line counts, density, etc.)
+//  4. Statistical Aggregates (mean, variance, and distribution of signals)
+//
+// # MAINTENANCE
+//
+// The FeatureRegistry is an append-only structure. Reordering or deleting
+// entries will shift feature indices and invalidate existing models.
+
 package ml
 
 import (
 	"math"
 	"sentinel/pkg/models"
+	"slices"
 )
 
 type FeatureVector struct {
@@ -11,9 +53,15 @@ type FeatureVector struct {
 }
 
 type FeatureExtractor struct {
-	languageIDMap map[string]int
+	languageIDMap   map[string]int
+	featureRegistry []string
 }
 
+// NewFeatureExtractor initializes the feature extractor with a fixed schema.
+//
+// WARNING: The order and content of 'featureRegistry' are CRITICAL for ML model stability.
+// Adding, removing, or reordering signals here will shift the feature indices and
+// cause existing ONNX models to produce incorrect results.
 func NewFeatureExtractor() *FeatureExtractor {
 	return &FeatureExtractor{
 		languageIDMap: map[string]int{
@@ -32,52 +80,44 @@ func NewFeatureExtractor() *FeatureExtractor {
 			"kotlin":     12,
 			"swift":      13,
 		},
+		featureRegistry: []string{
+			"comment_density", "generic_naming", "repetitive_patterns",
+			"code_complexity", "formatting_consistency", "boilerplate_patterns",
+			"comment_redundancy", "emoji_sentiment", "identifier_order", "defensive_ratio",
+		},
 	}
 }
 
-func (fe *FeatureExtractor) Extract(signals []models.Signal, language string, codeMetrics CodeMetrics) *FeatureVector {
+// This fucntion converts raw signals and metrics into a FeatureVector.
+// It ensures that features are mapped to consistent indices defined in the featureRegistry.
+func (fe *FeatureExtractor) Extract(signals []models.Signal, language string, metrics CodeMetrics) *FeatureVector {
 	features := make([]float32, 0, 50)
 	names := make([]string, 0, 50)
-	langID := fe.languageIDMap[language]
-	features = append(features, float32(langID))
+
+	features = append(features, float32(fe.languageIDMap[language]))
 	names = append(names, "language_id")
-	signalMap := make(map[string]float64)
 
-	for _, sig := range signals {
-		signalMap[sig.Name] = sig.Score
+	sigMap := make(map[string]float64)
+	for _, s := range signals {
+		sigMap[s.Name] = s.Score
 	}
 
-	signalNames := []string{
-		"comment_density",
-		"generic_naming",
-		"repetitive_patterns",
-		"code_complexity",
-		"formatting_consistency",
-		"boilerplate_patterns",
-		"ast_comment_density",
-		"ast_generic_naming",
-		"function_uniformity",
-		"trivial_functions",
-		"structural_repetition",
-		"over_documentation",
-	}
-
-	for _, name := range signalNames {
-		score := signalMap[name]
+	for _, regName := range fe.featureRegistry {
+		score := sigMap[regName]
 		features = append(features, float32(score))
-		names = append(names, name)
+		names = append(names, regName)
 	}
 
-	features = append(features, float32(codeMetrics.LineCount))
+	features = append(features, float32(metrics.LineCount))
 	names = append(names, "line_count")
 
-	features = append(features, float32(codeMetrics.CharCount))
+	features = append(features, float32(metrics.CharCount))
 	names = append(names, "char_count")
 
-	features = append(features, float32(codeMetrics.AvgLineLength))
+	features = append(features, float32(metrics.AvgLineLength))
 	names = append(names, "avg_line_length")
 
-	features = append(features, float32(codeMetrics.EmptyLineRatio))
+	features = append(features, float32(metrics.EmptyLineRatio))
 	names = append(names, "empty_line_ratio")
 
 	signalScores := make([]float64, 0, len(signals))
@@ -86,6 +126,7 @@ func (fe *FeatureExtractor) Extract(signals []models.Signal, language string, co
 	}
 
 	stats := calculateStats(signalScores)
+
 	features = append(features, float32(stats.Mean))
 	names = append(names, "signal_mean")
 
@@ -150,27 +191,20 @@ func calculateStats(scores []float64) Stats {
 	variance /= float64(len(scores))
 	stdDev := math.Sqrt(variance)
 
-	max := scores[0]
-	min := scores[0]
-	for _, s := range scores {
-		if s > max {
-			max = s
-		}
-		if s < min {
-			min = s
-		}
-	}
+	max := slices.Max(scores)
+	min := slices.Min(scores)
 
 	sorted := make([]float64, len(scores))
 	copy(sorted, scores)
-	for i := 0; i < len(sorted); i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[i] > sorted[j] {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
+	slices.Sort(sorted)
+
+	var median float64
+	n := len(sorted)
+	if n%2 == 0 {
+		median = (sorted[n/2-1] + sorted[n/2]) / 2.0
+	} else {
+		median = sorted[n/2]
 	}
-	median := sorted[len(sorted)/2]
 
 	return Stats{
 		Mean:   mean,

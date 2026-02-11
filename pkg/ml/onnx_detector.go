@@ -72,7 +72,7 @@ func NewONNXDetector(config ModelConfig) (*ONNXDetector, error) {
 		session:     session,
 		inputName:   config.InputName,
 		outputName:  config.OutputName,
-		inputShape:  []int64{1, 26},
+		inputShape:  []int64{1, int64(config.NumFeatures)},
 		initialized: true,
 	}
 

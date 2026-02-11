@@ -2,13 +2,14 @@ package ml
 
 import (
 	"fmt"
+	"math"
 	"sentinel/pkg/models"
 )
 
 const (
-	// DefaultNumFeatures defines the fixed size of the input tensor for the ML model.
-	// This must match the number of features the ONNX model was trained on.
-	DefaultNumFeatures = 25
+	// DefaultNumFeatures is the total count of features in the vector.
+	// 1 (Lang) + 10 (Heuristics) + 4 (Structural) + 6 (Stats) = 21
+	DefaultNumFeatures = 21
 
 	// DefaultMLWeight represents the influence of the ML score in the final calculation.
 	// A value of 0.7 means the final score is 70% ML and 30% heuristic signals.
@@ -87,47 +88,48 @@ type DetectionResult struct {
 }
 
 func (d *MLDetector) Detect(signals []models.Signal, language string, code string) (*DetectionResult, error) {
-	result := &DetectionResult{}
+	result := &DetectionResult{
+		UsedML: false,
+	}
 
-	heuristicScore := 0.0
+	maxHeuristic := 0.0
 	for _, sig := range signals {
-		if sig.Score > heuristicScore {
-			heuristicScore = sig.Score
+		if sig.Score > maxHeuristic {
+			maxHeuristic = sig.Score
 		}
 	}
-	result.HeuristicScore = heuristicScore
+	result.HeuristicScore = maxHeuristic
 
-	if d.onnxDetector.IsInitialized() {
-		codeMetrics := ExtractCodeMetrics(code)
-		featureVector := d.featureExtractor.Extract(signals, language, codeMetrics)
-		features := padFeatures(featureVector.Features, d.config.NumFeatures)
+	if d.onnxDetector != nil && d.onnxDetector.IsInitialized() {
+		metrics := ExtractCodeMetrics(code)
+		vector := d.featureExtractor.Extract(signals, language, metrics)
 
-		mlScore, err := d.onnxDetector.Predict(features)
+		features := padFeatures(vector.Features, d.config.NumFeatures)
+
+		mlProb, err := d.onnxDetector.Predict(features)
 		if err != nil {
 			if !d.config.FallbackMode {
 				return nil, fmt.Errorf("ML inference failed: %w", err)
 			}
 			result.MLScore = 0.0
-			result.UsedML = false
-			result.FinalScore = heuristicScore
+			result.FinalScore = maxHeuristic
 		} else {
-			result.MLScore = float64(mlScore)
+			result.MLScore = float64(mlProb)
 			result.UsedML = true
 			mlWeight := d.config.MLWeight
 			heuristicWeight := 1.0 - mlWeight
-			result.FinalScore = (mlWeight * result.MLScore) + (heuristicWeight * heuristicScore)
+			result.FinalScore = (mlWeight * result.MLScore) + (heuristicWeight * maxHeuristic)
 		}
 	} else {
-		result.MLScore = 0.0
-		result.UsedML = false
-		result.FinalScore = heuristicScore
+		result.FinalScore = maxHeuristic
 	}
 
 	if result.UsedML {
-		scoreDiff := abs(result.MLScore - result.HeuristicScore)
-		result.Confidence = 1.0 - scoreDiff
+		agreement := 1.0 - math.Abs(result.MLScore-result.HeuristicScore)
+		clarity := math.Abs(result.FinalScore-0.5) * 2.0
+		result.Confidence = (agreement * 0.6) + (clarity * 0.4)
 	} else {
-		result.Confidence = 0.7
+		result.Confidence = 0.70
 	}
 	result.IsAIGenerated = result.FinalScore >= d.config.MinConfidence
 	return result, nil

@@ -1,26 +1,40 @@
-// The package analyzer provides tools for 'heuristic analysis' of code to detect
+// Package analyzer provides tools for 'heuristic analysis' of code to detect
 // patterns commonly associated with AI-generated content.
 //
-// IMPROVING AND MAINTAINING THE HEURISTIC ANALYSIS
+// # CRITICAL: ML PIPELINE SYNCHRONIZATION
+//
+// The signals produced by this package serve as the primary input features for
+// the Machine Learning model.
+//
+// If you add a NEW detection signal here, you MUST:
+//  1. Append the new signal name to the 'featureRegistry' in 'pkg/ml/feature_extractor.go'.
+//  2. Update 'ml.DefaultNumFeatures' to reflect the new count.
+//  3. Re-train the ONNX model to include the new signal.
+//
+// Failure to do this will result in the ML model ignoring the new heuristic,
+// as the FeatureExtractor will not include it in the numerical vector passed
+// to the inference engine.
+//
+// # IMPROVING AND MAINTAINING THE HEURISTIC ANALYSIS
+//
 // When adding a New Detection Signal:
 //
-// sample:
+// 1. Define the detection logic:
 //
-// func (a *Analyzer) checkNewSignal(code string) detector.Signal {
-//    // The implementation
-//    return detector.Signal{
-//        Name:        "new_signal",
-//        Score:       calculatedScore,
-//        Description: "What this detects",
-//        Evidence:    "Supporting data",
+//    func (a *Analyzer) checkNewSignal(code string) models.Signal {
+//        // implementation logic...
+//        return models.Signal{
+//            Name:        "new_signal", // This name MUST match the ml Registry
+//            Score:       calculatedScore,
+//            Description: "What this detects",
+//        }
 //    }
-// }
 //
-// Then add to Analyze method
+// 2. Register it in the Analyze method:
 //
-// sample:
+//    signals = append(signals, a.checkNewSignal(code))
 //
-// signals = append(signals, a.checkNewSignal(code))
+// 3. Register it in pkg/ml/feature_extractor.go (FeatureRegistry) to ensure ML visibility.
 
 package analyzer
 
