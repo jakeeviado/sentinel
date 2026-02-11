@@ -150,27 +150,27 @@ func (d *Detector) scanFile(path string) FileResult {
 
 	heuristicSignals := d.analyzer.Analyze(codeString, result.Language)
 	result.Signals = heuristicSignals
-
-	heuristicScore := calculateHeuristicMaxScore(heuristicSignals)
-	result.HeuristicScore = heuristicScore
+	hScore := calculateHeuristicMaxScore(heuristicSignals)
+	result.HeuristicScore = hScore
 
 	if d.mlDetector != nil {
 		mlResult, err := d.mlDetector.Detect(heuristicSignals, result.Language, codeString)
 
 		if err != nil {
-			result.Score = heuristicScore
-			result.MLScore = 0.0
+			if d.detectorConfig.IsMLOnly {
+				result.Error = fmt.Errorf("ML inference failed: %w", err)
+				return result
+			}
+			result.Score = hScore
 			result.UsedML = false
 		} else {
 			result.Score = mlResult.FinalScore
 			result.MLScore = mlResult.MLScore
-			result.HeuristicScore = mlResult.HeuristicScore
 			result.UsedML = mlResult.UsedML
 			result.Confidence = mlResult.Confidence
 		}
 	} else {
-		result.Score = heuristicScore
-		result.MLScore = 0.0
+		result.Score = hScore
 		result.UsedML = false
 	}
 

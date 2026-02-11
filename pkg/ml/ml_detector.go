@@ -2,7 +2,6 @@ package ml
 
 import (
 	"fmt"
-	"math"
 	"sentinel/pkg/models"
 )
 
@@ -87,52 +86,54 @@ type DetectionResult struct {
 	IsAIGenerated  bool
 }
 
-func (d *MLDetector) Detect(signals []models.Signal, language string, code string) (*DetectionResult, error) {
-	result := &DetectionResult{
-		UsedML: false,
+func (m *MLDetector) Detect(signals []models.Signal, language string, code string) (DetectionResult, error) {
+	if m.onnxDetector == nil || !m.onnxDetector.initialized {
+		hScore := calculateHeuristicMaxScore(signals)
+		return DetectionResult{
+			FinalScore:     hScore,
+			HeuristicScore: hScore,
+			UsedML:         false,
+		}, nil
 	}
 
-	maxHeuristic := 0.0
-	for _, sig := range signals {
-		if sig.Score > maxHeuristic {
-			maxHeuristic = sig.Score
+	metrics := ExtractCodeMetrics(code)
+	vector := m.featureExtractor.Extract(signals, language, metrics)
+
+	mlScore, err := m.onnxDetector.Predict(vector.Features)
+	if err != nil {
+		if m.config.FallbackMode {
+			hScore := calculateHeuristicMaxScore(signals)
+			return DetectionResult{FinalScore: hScore, HeuristicScore: hScore, UsedML: false}, nil
+		}
+		return DetectionResult{}, err
+	}
+
+	heuristicScore := calculateHeuristicMaxScore(signals)
+	mlScore64 := float64(mlScore)
+	finalScore := (mlScore64 * m.config.MLWeight) + (heuristicScore * (1.0 - m.config.MLWeight))
+
+	return DetectionResult{
+		MLScore:        mlScore64,
+		HeuristicScore: heuristicScore,
+		FinalScore:     finalScore,
+		Confidence:     0.7,
+		UsedML:         true,
+		IsAIGenerated:  finalScore >= m.config.MinConfidence,
+	}, nil
+}
+
+func calculateHeuristicMaxScore(signals []models.Signal) float64 {
+	if len(signals) == 0 {
+		return 0.0
+	}
+
+	maxScore := 0.0
+	for _, signal := range signals {
+		if signal.Score > maxScore {
+			maxScore = signal.Score
 		}
 	}
-	result.HeuristicScore = maxHeuristic
-
-	if d.onnxDetector != nil && d.onnxDetector.IsInitialized() {
-		metrics := ExtractCodeMetrics(code)
-		vector := d.featureExtractor.Extract(signals, language, metrics)
-
-		features := padFeatures(vector.Features, d.config.NumFeatures)
-
-		mlProb, err := d.onnxDetector.Predict(features)
-		if err != nil {
-			if !d.config.FallbackMode {
-				return nil, fmt.Errorf("ML inference failed: %w", err)
-			}
-			result.MLScore = 0.0
-			result.FinalScore = maxHeuristic
-		} else {
-			result.MLScore = float64(mlProb)
-			result.UsedML = true
-			mlWeight := d.config.MLWeight
-			heuristicWeight := 1.0 - mlWeight
-			result.FinalScore = (mlWeight * result.MLScore) + (heuristicWeight * maxHeuristic)
-		}
-	} else {
-		result.FinalScore = maxHeuristic
-	}
-
-	if result.UsedML {
-		agreement := 1.0 - math.Abs(result.MLScore-result.HeuristicScore)
-		clarity := math.Abs(result.FinalScore-0.5) * 2.0
-		result.Confidence = (agreement * 0.6) + (clarity * 0.4)
-	} else {
-		result.Confidence = 0.70
-	}
-	result.IsAIGenerated = result.FinalScore >= d.config.MinConfidence
-	return result, nil
+	return maxScore
 }
 
 func (d *MLDetector) GetModelInfo() map[string]interface{} {
