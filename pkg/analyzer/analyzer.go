@@ -48,6 +48,10 @@ func (a *Analyzer) Analyze(code string, language string) []models.Signal {
 	signals = append(signals, a.checkCodeComplexity(code))
 	signals = append(signals, a.checkFormattingConsistency(code))
 	signals = append(signals, a.checkBoilerplatePatterns(code, language))
+	signals = append(signals, a.checkCommentRedundancy(code))
+	signals = append(signals, a.checkEmojiSentiment(code))
+	signals = append(signals, a.checkIdentifierOrder(code))
+	signals = append(signals, a.checkDefensiveRatio(code))
 	return signals
 }
 
@@ -336,6 +340,210 @@ func (a *Analyzer) checkBoilerplatePatterns(code string, language string) models
 		Score:       score,
 		Description: description,
 		Evidence:    formatEvidence("Boilerplate matches: %d", matches),
+	}
+}
+
+// This function flags comments that merely repeat the code logic.
+// High redundancy is a strong indicator of AI-generated "explanatory" style.
+func (a *Analyzer) checkCommentRedundancy(code string) models.Signal {
+	lines := strings.Split(code, "\n")
+	redundantCount := 0
+	totalComments := 0
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var codePart, commentPart string
+		if idx := strings.Index(line, "//"); idx != -1 {
+			codePart = strings.TrimSpace(line[:idx])
+			commentPart = strings.TrimSpace(line[idx+2:])
+		} else if idx := strings.Index(line, "#"); idx != -1 {
+			codePart = strings.TrimSpace(line[:idx])
+			commentPart = strings.TrimSpace(line[idx+1:])
+		}
+
+		if commentPart != "" {
+			totalComments++
+			if codePart != "" {
+				cCode := strings.ToLower(codePart)
+				cComment := strings.ToLower(commentPart)
+				words := strings.Fields(cComment)
+				matchCount := 0
+				for _, word := range words {
+					if len(word) > 2 && strings.Contains(cCode, word) {
+						matchCount++
+					}
+				}
+
+				if len(words) > 0 && float64(matchCount)/float64(len(words)) > 0.5 {
+					redundantCount++
+				}
+			}
+		}
+	}
+
+	var score float64
+	if totalComments > 0 {
+		score = float64(redundantCount) / float64(totalComments)
+	}
+
+	return models.Signal{
+		Name:        "comment_redundancy",
+		Score:       score,
+		Description: "Checks if comments repeat the code logic unnecessarily",
+		Evidence:    formatEvidence("Redundant comments: %d / %d", redundantCount, totalComments),
+	}
+}
+
+// This method scans for specific "hype" emojis or the most commong ones
+// that AI models frequently use in comments and log messages.
+func (a *Analyzer) checkEmojiSentiment(code string) models.Signal {
+	aiHypeEmojis := []string{"🚀", "✨", "✅", "💡", "🛠️", "🤖"}
+
+	emojiMatches := 0
+	found := make(map[string]int)
+
+	for _, emoji := range aiHypeEmojis {
+		count := strings.Count(code, emoji)
+		if count > 0 {
+			emojiMatches += count
+			found[emoji] = count
+		}
+	}
+
+	variety := len(found)
+	var score float64
+	var description string
+
+	if variety >= 3 || emojiMatches > 5 {
+		score = 0.8
+		description = "High density of AI-typical 'hype' emojis"
+	} else if variety >= 1 {
+		score = 0.3
+		description = "Presence of AI-typical emojis detected"
+	} else {
+		score = 0.0
+		description = "No AI-typical emoji patterns found"
+	}
+
+	evidenceParts := []string{}
+	for e, c := range found {
+		evidenceParts = append(evidenceParts, fmt.Sprintf("%s (%d)", e, c))
+	}
+
+	return models.Signal{
+		Name:        "emoji_sentiment",
+		Score:       score,
+		Description: description,
+		Evidence:    formatEvidence("Emojis found: %s", strings.Join(evidenceParts, ", ")),
+	}
+}
+
+// This method checks if lists of constants, variables, or keys
+// are sorted perfectly alphabetically, which is a common robotic generation trait.
+func (a *Analyzer) checkIdentifierOrder(code string) models.Signal {
+	lines := strings.Split(code, "\n")
+	var currentBlock []string
+	perfectlySortedBlocks := 0
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		isMatch, _ := regexp.MatchString(`^[A-Z_a-z0-9]+\s*[:=]`, trimmed)
+
+		if isMatch {
+			parts := regexp.MustCompile(`[:=]`).Split(trimmed, 2)
+			name := strings.TrimSpace(parts[0])
+			currentBlock = append(currentBlock, name)
+		} else {
+			if len(currentBlock) >= 6 {
+				if a.isSorted(currentBlock) {
+					perfectlySortedBlocks++
+				}
+			}
+			currentBlock = []string{}
+		}
+	}
+
+	var score float64
+	if perfectlySortedBlocks > 0 {
+		score = 0.6
+	}
+
+	return models.Signal{
+		Name:        "identifier_order",
+		Score:       score,
+		Description: "Detects perfectly alphabetical ordering in variable or constant blocks",
+		Evidence:    formatEvidence("Perfectly sorted blocks (6+ items): %d", perfectlySortedBlocks),
+	}
+}
+
+// Helper function for checkIdentifierOrder to check if a slice of strings is sorted
+func (a *Analyzer) isSorted(list []string) bool {
+	for i := 1; i < len(list); i++ {
+		if list[i] < list[i-1] {
+			return false
+		}
+	}
+	return true
+}
+
+// This method evaluates the frequency of safety checks.
+// AI code often includes an unnaturally high ratio of error/nil checks
+// compared to actual functional logic.
+func (a *Analyzer) checkDefensiveRatio(code string) models.Signal {
+	lines := strings.Split(code, "\n")
+	defensePatterns := []string{
+		"if err != nil", "if (err", "if (!err", "if (obj == null)",
+		"if (typeof", "try {", "catch (", "if not ", "if (!",
+	}
+
+	defenseCount := 0
+	logicCount := 0
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
+			continue
+		}
+
+		isDefense := false
+		for _, pattern := range defensePatterns {
+			if strings.Contains(trimmed, pattern) {
+				defenseCount++
+				isDefense = true
+				break
+			}
+		}
+
+		if !isDefense && (strings.Contains(trimmed, "=") || strings.Contains(trimmed, "(")) {
+			logicCount++
+		}
+	}
+
+	ratio := 0.0
+	if logicCount > 0 {
+		ratio = float64(defenseCount) / float64(logicCount)
+	}
+
+	var score float64
+	var description string
+
+	if ratio > 0.5 && logicCount > 5 {
+		score = 0.7
+		description = "Extremely high ratio of defensive safety checks"
+	} else if ratio > 0.3 {
+		score = 0.4
+		description = "High defensive programming density"
+	}
+
+	return models.Signal{
+		Name:        "defensive_ratio",
+		Score:       score,
+		Description: description,
+		Evidence:    formatEvidence("Safety checks: %d, Logic lines: %d (Ratio: %.2f)", defenseCount, logicCount, ratio),
 	}
 }
 
