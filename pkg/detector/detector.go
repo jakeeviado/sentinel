@@ -232,18 +232,24 @@ func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
 	if err != nil {
 		return err
 	}
-	defer trainingDataFile.Close()
+
+	defer func() {
+		if err := trainingDataFile.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close training data file: %v\n", err)
+		}
+	}()
 
 	writer := csv.NewWriter(trainingDataFile)
 	defer writer.Flush()
 
 	fe := ml.NewFeatureExtractor()
-	info, _ := trainingDataFile.Stat()
+	info, err := trainingDataFile.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to stat training file: %w", err)
+	}
 
 	if info.Size() == 0 {
-		dummyMetrics := ml.CodeMetrics{}
-		dummyVector := fe.Extract([]models.Signal{}, "unknown", dummyMetrics)
-
+		dummyVector := fe.Extract([]models.Signal{}, "unknown", ml.CodeMetrics{})
 		header := append(dummyVector.Names, "label")
 		if err := writer.Write(header); err != nil {
 			return err

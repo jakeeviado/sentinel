@@ -23,7 +23,12 @@ func RunDryRun(code string, language string) {
 		fmt.Printf("Error initializing detector: %v\n", err)
 		return
 	}
-	defer det.Close()
+
+	defer func() {
+		if err := det.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close detector: %v\n", err)
+		}
+	}()
 
 	az := analyzer.New()
 	signals := az.Analyze(code, language)
@@ -89,13 +94,35 @@ func TestFeatureExtractionPipeline(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Failed to read file %s: %v", path, err)
 			}
+
 			ext := filepath.Ext(path)
 			lang := "unknown"
-			if ext == ".py" {
+
+			switch ext {
+			case ".py":
 				lang = "python"
-			} else if ext == ".go" {
+			case ".go":
 				lang = "go"
+			case ".java":
+				lang = "java"
+			case ".js", ".ts":
+				lang = "javascript"
+			case ".rs":
+				lang = "rust"
+			case ".cpp", ".c", ".h", ".cc":
+				lang = "cpp"
+			case ".rb":
+				lang = "ruby"
+			case ".php":
+				lang = "php"
+			case ".cs":
+				lang = "csharp"
+			case ".kt":
+				lang = "kotlin"
+			case ".swift":
+				lang = "swift"
 			}
+
 			fmt.Printf("\n>>> FILE: %s <<<\n", path)
 			RunDryRun(string(content), lang)
 		})

@@ -158,26 +158,3 @@ func (d *MLDetector) Close() error {
 	}
 	return nil
 }
-
-func abs(x float64) float64 {
-	if x < 0 {
-		return -x
-	}
-	return x
-}
-
-func padFeatures(features []float32, targetSize int) []float32 {
-	if len(features) == targetSize {
-		return features
-	}
-	padded := make([]float32, targetSize)
-	copyLen := len(features)
-	if copyLen > targetSize {
-		copyLen = targetSize
-	}
-	copy(padded, features[:copyLen])
-	for i := copyLen; i < targetSize; i++ {
-		padded[i] = 0.0
-	}
-	return padded
-}

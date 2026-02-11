@@ -46,6 +46,11 @@ import (
 	"sentinel/pkg/models"
 )
 
+var (
+	identifierRegex = regexp.MustCompile(`^[A-Z_a-z0-9]+\s*[:=]`)
+	assignmentRegex = regexp.MustCompile(`[:=]`)
+)
+
 type Analyzer struct{}
 
 func New() *Analyzer {
@@ -465,10 +470,8 @@ func (a *Analyzer) checkIdentifierOrder(code string) models.Signal {
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		isMatch, _ := regexp.MatchString(`^[A-Z_a-z0-9]+\s*[:=]`, trimmed)
-
-		if isMatch {
-			parts := regexp.MustCompile(`[:=]`).Split(trimmed, 2)
+		if identifierRegex.MatchString(trimmed) {
+			parts := assignmentRegex.Split(trimmed, 2)
 			name := strings.TrimSpace(parts[0])
 			currentBlock = append(currentBlock, name)
 		} else {

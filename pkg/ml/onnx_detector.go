@@ -88,12 +88,14 @@ func (d *ONNXDetector) Predict(features []float32) (float32, error) {
 	if err != nil {
 		return 0.0, err
 	}
-	defer inputTensor.Destroy()
 
-	outputTensors := []*onnxruntime.Tensor[float32]{
-		nil,
-		nil,
-	}
+	defer func() {
+		if err := inputTensor.Destroy(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to destroy input tensor: %v\n", err)
+		}
+	}()
+
+	outputTensors := []*onnxruntime.Tensor[float32]{nil, nil}
 
 	err = d.session.Run([]*onnxruntime.Tensor[float32]{inputTensor}, outputTensors)
 	if err != nil {
@@ -101,11 +103,12 @@ func (d *ONNXDetector) Predict(features []float32) (float32, error) {
 	}
 
 	defer func() {
-		if outputTensors[0] != nil {
-			outputTensors[0].Destroy()
-		}
-		if outputTensors[1] != nil {
-			outputTensors[1].Destroy()
+		for i, t := range outputTensors {
+			if t != nil {
+				if err := t.Destroy(); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to destroy output tensor %d: %v\n", i, err)
+				}
+			}
 		}
 	}()
 
@@ -164,8 +167,10 @@ func (d *ONNXDetector) PredictBatch(featureBatch [][]float32) ([]float32, error)
 		return nil, err
 	}
 	defer func() {
-		if err := outputTensors[0].Destroy(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to destroy output tensor: %v\n", err)
+		if outputTensors[0] != nil {
+			if err := outputTensors[0].Destroy(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to destroy batch output tensor: %v\n", err)
+			}
 		}
 	}()
 
