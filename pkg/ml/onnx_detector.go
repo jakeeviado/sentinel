@@ -40,7 +40,7 @@ func NewONNXDetector(config ModelConfig) (*ONNXDetector, error) {
 		config.OutputName = "output"
 	}
 	if config.NumFeatures == 0 {
-		config.NumFeatures = 26
+		config.NumFeatures = DefaultNumFeatures
 	}
 
 	options, err := onnxruntime.NewSessionOptions()
@@ -72,7 +72,7 @@ func NewONNXDetector(config ModelConfig) (*ONNXDetector, error) {
 		session:     session,
 		inputName:   config.InputName,
 		outputName:  config.OutputName,
-		inputShape:  []int64{1, 26},
+		inputShape:  []int64{1, int64(config.NumFeatures)},
 		initialized: true,
 	}
 
@@ -86,42 +86,42 @@ func (d *ONNXDetector) Predict(features []float32) (float32, error) {
 
 	inputTensor, err := onnxruntime.NewTensor(d.inputShape, features)
 	if err != nil {
-		return 0.0, fmt.Errorf("failed to create input tensor: %w", err)
+		return 0.0, err
 	}
+
 	defer func() {
 		if err := inputTensor.Destroy(); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: failed to destroy input tensor: %v\n", err)
 		}
 	}()
 
-	outputTensors := make([]*onnxruntime.Tensor[float32], 1)
+	outputTensors := []*onnxruntime.Tensor[float32]{nil, nil}
+
 	err = d.session.Run([]*onnxruntime.Tensor[float32]{inputTensor}, outputTensors)
 	if err != nil {
 		return 0.0, fmt.Errorf("inference failed: %w", err)
 	}
 
-	if outputTensors[0] == nil {
-		return 0.0, fmt.Errorf("model produced no output tensor")
-	}
 	defer func() {
-		if err := outputTensors[0].Destroy(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to destroy output tensor: %v\n", err)
+		for i, t := range outputTensors {
+			if t != nil {
+				if err := t.Destroy(); err != nil {
+					fmt.Fprintf(os.Stderr, "Warning: failed to destroy output tensor %d: %v\n", i, err)
+				}
+			}
 		}
 	}()
 
-	outputSlice := outputTensors[0].GetData()
-	if len(outputSlice) == 0 {
-		return 0.0, fmt.Errorf("empty output data")
+	if outputTensors[1] == nil {
+		return 0.0, fmt.Errorf("model produced no probability tensor at index 1")
 	}
 
-	probability := outputSlice[0]
-	if probability < 0.0 {
-		probability = 0.0
-	} else if probability > 1.0 {
-		probability = 1.0
+	probData := outputTensors[1].GetData()
+	if len(probData) < 2 {
+		return 0.0, fmt.Errorf("invalid probability data length")
 	}
 
-	return probability, nil
+	return probData[1], nil
 }
 
 func (d *ONNXDetector) IsInitialized() bool {
@@ -167,8 +167,10 @@ func (d *ONNXDetector) PredictBatch(featureBatch [][]float32) ([]float32, error)
 		return nil, err
 	}
 	defer func() {
-		if err := outputTensors[0].Destroy(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to destroy output tensor: %v\n", err)
+		if outputTensors[0] != nil {
+			if err := outputTensors[0].Destroy(); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to destroy batch output tensor: %v\n", err)
+			}
 		}
 	}()
 

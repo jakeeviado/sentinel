@@ -10,23 +10,41 @@ import (
 
 var cfgFile string
 
+const banner = `
+   ▄████████    ▄████████ ███▄▄▄▄       ███      ▄█  ███▄▄▄▄      ▄████████  ▄█
+  ███    ███   ███    ███ ███▀▀▀██▄ ▀█████████▄ ███  ███▀▀▀██▄   ███    ███ ███
+  ███    █▀    ███    █▀  ███   ███    ▀███▀▀██ ███▌ ███   ███   ███    █▀  ███
+  ███         ▄███▄▄▄     ███   ███     ███   ▀ ███▌ ███   ███  ▄███▄▄▄     ███
+▀███████████ ▀▀███▀▀▀     ███   ███     ███     ███▌ ███   ███ ▀▀███▀▀▀     ███
+         ███   ███    █▄  ███   ███     ███     ███  ███   ███   ███    █▄  ███
+   ▄█    ███   ███    ███ ███   ███     ███     ███  ███   ███   ███    ███ ███▌    ▄
+ ▄████████▀    ██████████  ▀█   █▀     ▄████▀   █▀    ▀█   █▀    ██████████ █████▄▄██
+                                                                         ▀
+                    ⌀ The vigilant guard for code authenticity
+`
+
 var rootCmd = &cobra.Command{
-	Use:   "./sentinel",
+	Use:   "sentinel",
 	Short: "⌀ Sentinel - The vigilant guard for code authenticity.",
-	Long: `⌀ Sentinel - The vigilant guard for code authenticity.
+	Long: banner + `
+Sentinel uses a hybrid approach (Heuristics + Machine Learning) to
+detect patterns indicative of AI-generated source code.
 
-SUPPORTED LANGUAGES (early support):
-  Python, Java, JavaScript, TypeScript, Go, Rust, C/C++, Ruby, PHP, C#, Kotlin, Swift
+` + "── LANGUAGES SUPPORTED ──────────────────────────────────────────" + `
+  Python, Java, JavaScript, TypeScript, Go, Rust, C++, Ruby, PHP,
+  C#, Kotlin, Swift
 
-QUICK START:
-  # Scan current directory
-    ./sentinel scan --path .
+` + "── QUICK START ──────────────────────────────────────────────────" + `
+  # Scan current directory with default settings
+  $ ./sentinel scan
 
-  # Scan with treshold specified
-    ./sentinel scan --path ./your-target-dir --threshold 0.8
+  # Scan with high strictness
+  $ ./sentinel scan --path ./src --threshold 0.85 --verbose
 
-  # CI/CD integration that cancel build if an AI-slop is detected
-    ./sentinel scan --git-diff main --fail-on-detection`,
+  # CI/CD: Scan only changed files and fail on detection
+  $ ./sentinel scan --git-diff main --fail-on-detection
+
+` + "──────────────────────────────────────────────────────────────────",
 }
 
 func Execute() {

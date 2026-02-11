@@ -1,3 +1,41 @@
+// Package analyzer provides tools for 'heuristic analysis' of code to detect
+// patterns commonly associated with AI-generated content.
+//
+// # CRITICAL: ML PIPELINE SYNCHRONIZATION
+//
+// The signals produced by this package serve as the primary input features for
+// the Machine Learning model.
+//
+// If you add a NEW detection signal here, you MUST:
+//  1. Append the new signal name to the 'featureRegistry' in 'pkg/ml/feature_extractor.go'.
+//  2. Update 'ml.DefaultNumFeatures' to reflect the new count.
+//  3. Re-train the ONNX model to include the new signal.
+//
+// Failure to do this will result in the ML model ignoring the new heuristic,
+// as the FeatureExtractor will not include it in the numerical vector passed
+// to the inference engine.
+//
+// # IMPROVING AND MAINTAINING THE HEURISTIC ANALYSIS
+//
+// When adding a New Detection Signal:
+//
+// 1. Define the detection logic:
+//
+//    func (a *Analyzer) checkNewSignal(code string) models.Signal {
+//        // implementation logic...
+//        return models.Signal{
+//            Name:        "new_signal", // This name MUST match the ml Registry
+//            Score:       calculatedScore,
+//            Description: "What this detects",
+//        }
+//    }
+//
+// 2. Register it in the Analyze method:
+//
+//    signals = append(signals, a.checkNewSignal(code))
+//
+// 3. Register it in pkg/ml/feature_extractor.go (FeatureRegistry) to ensure ML visibility.
+
 package analyzer
 
 import (
@@ -8,32 +46,36 @@ import (
 	"sentinel/pkg/models"
 )
 
-type Analyzer struct {
-	// CONFIGURATION FOR ANALYSIS
-}
+var (
+	identifierRegex = regexp.MustCompile(`^[A-Z_a-z0-9]+\s*[:=]`)
+	assignmentRegex = regexp.MustCompile(`[:=]`)
+)
+
+type Analyzer struct{}
 
 func New() *Analyzer {
 	return &Analyzer{}
 }
 
+// Analyze runs the full suite of heuristic checks against the provided code.
+// It returns a slice of 'Signals', each is representing a different detection metric.
 func (a *Analyzer) Analyze(code string, language string) []models.Signal {
 	signals := make([]models.Signal, 0)
-
-	// RUN HEURISTIC CHCKS
 	signals = append(signals, a.checkCommentDensity(code))
 	signals = append(signals, a.checkGenericNaming(code))
 	signals = append(signals, a.checkRepetitivePatterns(code))
 	signals = append(signals, a.checkCodeComplexity(code))
 	signals = append(signals, a.checkFormattingConsistency(code))
 	signals = append(signals, a.checkBoilerplatePatterns(code, language))
-
+	signals = append(signals, a.checkCommentRedundancy(code))
+	signals = append(signals, a.checkEmojiSentiment(code))
+	signals = append(signals, a.checkIdentifierOrder(code))
+	signals = append(signals, a.checkDefensiveRatio(code))
 	return signals
 }
 
-/*
- * Check for excessive comments
- * (AI often over-comments)
- */
+// This function calculates the ratio of comments to total lines.
+// AI models tend to produce highly documented code, leading to higher density.
 func (a *Analyzer) checkCommentDensity(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	if len(lines) == 0 {
@@ -74,10 +116,8 @@ func (a *Analyzer) checkCommentDensity(code string) models.Signal {
 	}
 }
 
-/*
- * Check for generic variable names
- * (common in AI code)
- */
+// This function identifies the frequency of placeholder variable names
+// like 'temp', 'data', or 'obj', which are common in AI-generated snippets.
 func (a *Analyzer) checkGenericNaming(code string) models.Signal {
 	genericNames := []string{
 		"temp", "tmp", "data", "result", "item", "value", "obj", "elem",
@@ -120,20 +160,17 @@ func (a *Analyzer) checkGenericNaming(code string) models.Signal {
 	}
 }
 
-/*
- * Checks repetitive code patterns
- */
+// This function looks for identical lines of code.
+// High repetition can be a sign of limited variation in generated output.
 func (a *Analyzer) checkRepetitivePatterns(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	if len(lines) < 10 {
 		return models.Signal{Name: "repetitive_patterns", Score: 0.0}
 	}
 
-	// CHECK FOR REPEATED LINES
 	lineCount := make(map[string]int)
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		// SHORT LINES ARE IGNORED
 		if len(trimmed) > 10 {
 			lineCount[trimmed]++
 		}
@@ -170,12 +207,9 @@ func (a *Analyzer) checkRepetitivePatterns(code string) models.Signal {
 	}
 }
 
-/*
- * Checks the code complexity
- * (AI code tends to be simpler but shittier)
- */
+// This function measures control flow density.
+// AI code often follows simpler, more linear paths compared to complex human logic.
 func (a *Analyzer) checkCodeComplexity(code string) models.Signal {
-	// COUNTS CONTROL FLOW STATEMENTS
 	controlFlowKeywords := []string{
 		"if", "else", "switch", "case", "for", "while", "do",
 		"try", "catch", "finally", "throw",
@@ -203,7 +237,6 @@ func (a *Analyzer) checkCodeComplexity(code string) models.Signal {
 	var score float64
 	var description string
 
-	// LOW COMPLEXITY MIGHT INDICATE AN AI-GEN CODE
 	if complexity < 0.05 {
 		score = 0.6
 		description = "Unusually low cyclomatic complexity"
@@ -223,17 +256,14 @@ func (a *Analyzer) checkCodeComplexity(code string) models.Signal {
 	}
 }
 
-/*
- * Check formatting consistency
- * (AI is very consistent)
- */
+// This fucntion evaluates how strictly indentation is followed.
+// Perfect or near-perfect consistency is often a hallmark of programmatic generation.
 func (a *Analyzer) checkFormattingConsistency(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	if len(lines) < 5 {
 		return models.Signal{Name: "formatting_consistency", Score: 0.0}
 	}
 
-	// CHECK INDENTAION CONSISTENCY
 	indentations := make(map[int]int)
 	for _, line := range lines {
 		if len(strings.TrimSpace(line)) == 0 {
@@ -251,7 +281,6 @@ func (a *Analyzer) checkFormattingConsistency(code string) models.Signal {
 		indentations[indent]++
 	}
 
-	// PERFECT CONSISTENCY MIGHT INDICATE AI-GEN CODE
 	uniqueIndents := len(indentations)
 
 	var score float64
@@ -273,9 +302,9 @@ func (a *Analyzer) checkFormattingConsistency(code string) models.Signal {
 	}
 }
 
-/*
- * Checks for the most common AI boilerplate patterns (more improvements soon)
- */
+// This function searches for common AI signatures and standard templates
+// based on the specific programming language.
+// (BAD IMPLEMENTATION FOR NOW)
 func (a *Analyzer) checkBoilerplatePatterns(code string, language string) models.Signal {
 	boilerplatePatterns := map[string][]string{
 		"python": {
@@ -330,6 +359,208 @@ func (a *Analyzer) checkBoilerplatePatterns(code string, language string) models
 		Score:       score,
 		Description: description,
 		Evidence:    formatEvidence("Boilerplate matches: %d", matches),
+	}
+}
+
+// This function flags comments that merely repeat the code logic.
+// High redundancy is a strong indicator of AI-generated "explanatory" style.
+func (a *Analyzer) checkCommentRedundancy(code string) models.Signal {
+	lines := strings.Split(code, "\n")
+	redundantCount := 0
+	totalComments := 0
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var codePart, commentPart string
+		if idx := strings.Index(line, "//"); idx != -1 {
+			codePart = strings.TrimSpace(line[:idx])
+			commentPart = strings.TrimSpace(line[idx+2:])
+		} else if idx := strings.Index(line, "#"); idx != -1 {
+			codePart = strings.TrimSpace(line[:idx])
+			commentPart = strings.TrimSpace(line[idx+1:])
+		}
+
+		if commentPart != "" {
+			totalComments++
+			if codePart != "" {
+				cCode := strings.ToLower(codePart)
+				cComment := strings.ToLower(commentPart)
+				words := strings.Fields(cComment)
+				matchCount := 0
+				for _, word := range words {
+					if len(word) > 2 && strings.Contains(cCode, word) {
+						matchCount++
+					}
+				}
+
+				if len(words) > 0 && float64(matchCount)/float64(len(words)) > 0.5 {
+					redundantCount++
+				}
+			}
+		}
+	}
+
+	var score float64
+	if totalComments > 0 {
+		score = float64(redundantCount) / float64(totalComments)
+	}
+
+	return models.Signal{
+		Name:        "comment_redundancy",
+		Score:       score,
+		Description: "Checks if comments repeat the code logic unnecessarily",
+		Evidence:    formatEvidence("Redundant comments: %d / %d", redundantCount, totalComments),
+	}
+}
+
+// This method scans for specific "hype" emojis or the most commong ones
+// that AI models frequently use in comments and log messages.
+func (a *Analyzer) checkEmojiSentiment(code string) models.Signal {
+	aiHypeEmojis := []string{"🚀", "✨", "✅", "💡", "🛠️", "🤖"}
+
+	emojiMatches := 0
+	found := make(map[string]int)
+
+	for _, emoji := range aiHypeEmojis {
+		count := strings.Count(code, emoji)
+		if count > 0 {
+			emojiMatches += count
+			found[emoji] = count
+		}
+	}
+
+	variety := len(found)
+	var score float64
+	var description string
+
+	if variety >= 3 || emojiMatches > 5 {
+		score = 0.8
+		description = "High density of AI-typical 'hype' emojis"
+	} else if variety >= 1 {
+		score = 0.3
+		description = "Presence of AI-typical emojis detected"
+	} else {
+		score = 0.0
+		description = "No AI-typical emoji patterns found"
+	}
+
+	evidenceParts := []string{}
+	for e, c := range found {
+		evidenceParts = append(evidenceParts, fmt.Sprintf("%s (%d)", e, c))
+	}
+
+	return models.Signal{
+		Name:        "emoji_sentiment",
+		Score:       score,
+		Description: description,
+		Evidence:    formatEvidence("Emojis found: %s", strings.Join(evidenceParts, ", ")),
+	}
+}
+
+// This method checks if lists of constants, variables, or keys
+// are sorted perfectly alphabetically, which is a common robotic generation trait.
+func (a *Analyzer) checkIdentifierOrder(code string) models.Signal {
+	lines := strings.Split(code, "\n")
+	var currentBlock []string
+	perfectlySortedBlocks := 0
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if identifierRegex.MatchString(trimmed) {
+			parts := assignmentRegex.Split(trimmed, 2)
+			name := strings.TrimSpace(parts[0])
+			currentBlock = append(currentBlock, name)
+		} else {
+			if len(currentBlock) >= 6 {
+				if a.isSorted(currentBlock) {
+					perfectlySortedBlocks++
+				}
+			}
+			currentBlock = []string{}
+		}
+	}
+
+	var score float64
+	if perfectlySortedBlocks > 0 {
+		score = 0.6
+	}
+
+	return models.Signal{
+		Name:        "identifier_order",
+		Score:       score,
+		Description: "Detects perfectly alphabetical ordering in variable or constant blocks",
+		Evidence:    formatEvidence("Perfectly sorted blocks (6+ items): %d", perfectlySortedBlocks),
+	}
+}
+
+// Helper function for checkIdentifierOrder to check if a slice of strings is sorted
+func (a *Analyzer) isSorted(list []string) bool {
+	for i := 1; i < len(list); i++ {
+		if list[i] < list[i-1] {
+			return false
+		}
+	}
+	return true
+}
+
+// This method evaluates the frequency of safety checks.
+// AI code often includes an unnaturally high ratio of error/nil checks
+// compared to actual functional logic.
+func (a *Analyzer) checkDefensiveRatio(code string) models.Signal {
+	lines := strings.Split(code, "\n")
+	defensePatterns := []string{
+		"if err != nil", "if (err", "if (!err", "if (obj == null)",
+		"if (typeof", "try {", "catch (", "if not ", "if (!",
+	}
+
+	defenseCount := 0
+	logicCount := 0
+
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || strings.HasPrefix(trimmed, "//") || strings.HasPrefix(trimmed, "/*") {
+			continue
+		}
+
+		isDefense := false
+		for _, pattern := range defensePatterns {
+			if strings.Contains(trimmed, pattern) {
+				defenseCount++
+				isDefense = true
+				break
+			}
+		}
+
+		if !isDefense && (strings.Contains(trimmed, "=") || strings.Contains(trimmed, "(")) {
+			logicCount++
+		}
+	}
+
+	ratio := 0.0
+	if logicCount > 0 {
+		ratio = float64(defenseCount) / float64(logicCount)
+	}
+
+	var score float64
+	var description string
+
+	if ratio > 0.5 && logicCount > 5 {
+		score = 0.7
+		description = "Extremely high ratio of defensive safety checks"
+	} else if ratio > 0.3 {
+		score = 0.4
+		description = "High defensive programming density"
+	}
+
+	return models.Signal{
+		Name:        "defensive_ratio",
+		Score:       score,
+		Description: description,
+		Evidence:    formatEvidence("Safety checks: %d, Logic lines: %d (Ratio: %.2f)", defenseCount, logicCount, ratio),
 	}
 }
 

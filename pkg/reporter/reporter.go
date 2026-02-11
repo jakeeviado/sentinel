@@ -36,6 +36,7 @@ func (r *Reporter) reportJSON(results *detector.ScanResults) error {
 		"total_files":    results.TotalFiles,
 		"detected_files": results.DetectedFiles,
 		"average_score":  results.AverageScore,
+		"ml_enabled":     results.UsedML,
 		"threshold":      r.config.Threshold,
 		"files":          r.formatFilesForJSON(results.Files),
 	}
@@ -85,20 +86,24 @@ func (r *Reporter) reportText(results *detector.ScanResults) error {
 	fmt.Println("================================================================================")
 	fmt.Println()
 
+	mode := "Heuristics Only"
+	if results.UsedML {
+		mode = "Machine Learning + Heuristics"
+	}
+
+	fmt.Printf("Detection Mode:       %s\n", mode)
 	fmt.Printf("Total Files Scanned:  %d\n", results.TotalFiles)
 	fmt.Printf("Files Detected:       %d\n", results.DetectedFiles)
 	fmt.Printf("Average Score:        %.2f\n", results.AverageScore)
 	fmt.Printf("Detection Threshold:  %.2f\n", r.config.Threshold)
 	fmt.Println()
 
-	// SORT FILES BY SCORE (highest first)
 	sortedFiles := make([]detector.FileResult, len(results.Files))
 	copy(sortedFiles, results.Files)
 	sort.Slice(sortedFiles, func(i, j int) bool {
 		return sortedFiles[i].Score > sortedFiles[j].Score
 	})
 
-	// REPORT DETECTED FILES
 	if results.DetectedFiles > 0 {
 		fmt.Println("[!] DETECTED FILES (above threshold):")
 		fmt.Println("--------------------------------------------------------------------------------")
@@ -111,7 +116,6 @@ func (r *Reporter) reportText(results *detector.ScanResults) error {
 		fmt.Println()
 	}
 
-	// REPORT SUSPICIOUS FILES (below threshold but noteworthy)
 	suspiciousFiles := 0
 	for _, file := range sortedFiles {
 		if file.Score >= r.config.Threshold*0.6 && file.Score < r.config.Threshold {
@@ -131,7 +135,6 @@ func (r *Reporter) reportText(results *detector.ScanResults) error {
 		fmt.Println()
 	}
 
-	// SUMMARY
 	fmt.Println("================================================================================")
 	if results.DetectedFiles > 0 {
 		fmt.Printf("FAILED: %d file(s) detected as likely AI-generated\n", results.DetectedFiles)
@@ -144,29 +147,39 @@ func (r *Reporter) reportText(results *detector.ScanResults) error {
 }
 
 func (r *Reporter) printFileResult(file detector.FileResult) {
+	mlBadge := ""
+	if file.UsedML {
+		mlBadge = " [ML]"
+	}
+
 	fmt.Printf("%s\n", file.Path)
-	fmt.Printf("   Score: %.2f | Language: %s\n", file.Score, file.Language)
+	fmt.Printf("   Score: %.2f%s | Language: %s\n", file.Score, mlBadge, file.Language)
 
 	if file.Error != nil {
 		fmt.Printf("   Error: %s\n", file.Error.Error())
 		return
 	}
 
-	if r.config.Verbose && len(file.Signals) > 0 {
-		fmt.Println("   Signals:")
+	if r.config.Verbose {
+		if file.UsedML {
+			fmt.Printf("   Confidence: %.2f | ML Score: %.2f | Heuristic Score: %.2f\n",
+				file.Confidence, file.MLScore, file.HeuristicScore)
+		}
 
-		// SORT SIGNALS BY SCORE
-		signals := make([]models.Signal, len(file.Signals))
-		copy(signals, file.Signals)
-		sort.Slice(signals, func(i, j int) bool {
-			return signals[i].Score > signals[j].Score
-		})
+		if len(file.Signals) > 0 {
+			fmt.Println("   Signals:")
+			signals := make([]models.Signal, len(file.Signals))
+			copy(signals, file.Signals)
+			sort.Slice(signals, func(i, j int) bool {
+				return signals[i].Score > signals[j].Score
+			})
 
-		for _, sig := range signals {
-			if sig.Score > 0.0 {
-				fmt.Printf("     • %s (%.2f): %s\n", sig.Name, sig.Score, sig.Description)
-				if sig.Evidence != "" {
-					fmt.Printf("       %s\n", sig.Evidence)
+			for _, sig := range signals {
+				if sig.Score > 0.0 {
+					fmt.Printf("     • %s (%.2f): %s\n", sig.Name, sig.Score, sig.Description)
+					if sig.Evidence != "" {
+						fmt.Printf("       %s\n", sig.Evidence)
+					}
 				}
 			}
 		}

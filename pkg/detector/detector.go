@@ -13,48 +13,29 @@ import (
 	"sentinel/pkg/models"
 )
 
-var languageIDMap = map[string]string{
-	"unknown":    "0",
-	"python":     "1",
-	"java":       "2",
-	"javascript": "3",
-	"typescript": "4",
-	"go":         "5",
-	"rust":       "6",
-	"cpp":        "7",
-	"c":          "8",
-	"ruby":       "9",
-	"php":        "10",
-	"csharp":     "11",
-	"kotlin":     "12",
-	"swift":      "13",
-}
-
-type Config struct {
+type DetectorConfiguration struct {
 	Threshold    float64
 	Languages    []string
 	ExcludePaths []string
-	Verbose      bool
-	// MACHINE LEARNING CONFIG
-	ModelPath string
-	UseML     bool
-	MLWeight  float64
-	MLOnly    bool
+	IsVerbose    bool
+	ModelPath    string
+	UseML        bool
+	MLWeight     float64
+	IsMLOnly     bool
 }
 
 type Detector struct {
-	config     Config
-	analyzer   *analyzer.Analyzer
-	mlDetector *ml.MLDetector
+	detectorConfig DetectorConfiguration
+	analyzer       *analyzer.Analyzer
+	mlDetector     *ml.MLDetector
 }
 
 type FileResult struct {
-	Path     string
-	Score    float64
-	Signals  []models.Signal
-	Language string
-	Error    error
-	// MACHINE LEARNING SPECIFIC FIELDS
+	Path           string
+	Score          float64
+	Signals        []models.Signal
+	Language       string
+	Error          error
 	MLScore        float64
 	HeuristicScore float64
 	UsedML         bool
@@ -69,27 +50,31 @@ type ScanResults struct {
 	UsedML        bool
 }
 
-func New(config Config) *Detector {
+func New(config DetectorConfiguration) *Detector {
 	detector := &Detector{
-		config:   config,
-		analyzer: analyzer.New(),
+		detectorConfig: config,
+		analyzer:       analyzer.New(),
 	}
+
 	if config.UseML && config.ModelPath != "" {
 		mlConfig := ml.DetectionConfig{
 			ModelPath:     config.ModelPath,
 			MLWeight:      config.MLWeight,
-			FallbackMode:  !config.MLOnly,
-			RequireML:     config.MLOnly,
+			FallbackMode:  !config.IsMLOnly,
+			RequireML:     config.IsMLOnly,
 			MinConfidence: config.Threshold,
-			NumFeatures:   25,
+			NumFeatures:   ml.DefaultNumFeatures,
 		}
-		mlDetector, err := ml.NewMLDetector(mlConfig)
+
+		machineLearningDetector, err := ml.NewMLDetector(mlConfig)
+
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: ML initialization failed: %v\n", err)
 			fmt.Fprintf(os.Stderr, "Falling back to heuristics-only mode\n")
 		} else {
-			detector.mlDetector = mlDetector
-			if config.Verbose {
+			detector.mlDetector = machineLearningDetector
+
+			if config.IsVerbose {
 				fmt.Fprintf(os.Stderr, "ML model loaded: %s\n", config.ModelPath)
 			}
 		}
@@ -98,47 +83,47 @@ func New(config Config) *Detector {
 }
 
 func (d *Detector) ScanFiles(files []string) (*ScanResults, error) {
-	results := &ScanResults{
+	report := &ScanResults{
 		Files:      make([]FileResult, 0, len(files)),
 		TotalFiles: len(files),
 		UsedML:     d.mlDetector != nil,
 	}
 
-	resultsChan := make(chan FileResult, len(files))
-	var wg sync.WaitGroup
+	resultsChannel := make(chan FileResult, len(files))
+	var waitGroup sync.WaitGroup
 	semaphore := make(chan struct{}, 10)
 
 	for _, file := range files {
-		wg.Add(1)
+		waitGroup.Add(1)
 		go func(path string) {
-			defer wg.Done()
+			defer waitGroup.Done()
 			semaphore <- struct{}{}
 			defer func() { <-semaphore }()
-
 			result := d.scanFile(path)
-			resultsChan <- result
+			resultsChannel <- result
 		}(file)
 	}
+
 	go func() {
-		wg.Wait()
-		close(resultsChan)
+		waitGroup.Wait()
+		close(resultsChannel)
 	}()
 
 	totalScore := 0.0
-	for result := range resultsChan {
-		results.Files = append(results.Files, result)
+	for result := range resultsChannel {
+		report.Files = append(report.Files, result)
 		totalScore += result.Score
 
-		if result.Score >= d.config.Threshold {
-			results.DetectedFiles++
+		if result.Score >= d.detectorConfig.Threshold {
+			report.DetectedFiles++
 		}
 	}
 
-	if len(results.Files) > 0 {
-		results.AverageScore = totalScore / float64(len(results.Files))
+	if len(report.Files) > 0 {
+		report.AverageScore = totalScore / float64(len(report.Files))
 	}
 
-	return results, nil
+	return report, nil
 }
 
 func (d *Detector) scanFile(path string) FileResult {
@@ -155,48 +140,44 @@ func (d *Detector) scanFile(path string) FileResult {
 		return result
 	}
 
-	content, err := os.ReadFile(path)
+	fileContent, err := os.ReadFile(path)
 	if err != nil {
 		result.Error = err
 		return result
 	}
 
-	codeString := string(content)
+	codeString := string(fileContent)
 
-	// Run analysis (get heuristic signals)
-	signals := d.analyzer.Analyze(codeString, result.Language)
-	result.Signals = signals
+	heuristicSignals := d.analyzer.Analyze(codeString, result.Language)
+	result.Signals = heuristicSignals
+	hScore := calculateHeuristicMaxScore(heuristicSignals)
+	result.HeuristicScore = hScore
 
-	// Calculate heuristic score (using maximum signal score)
-	heuristicScore := calculateMaxScore(signals)
-	result.HeuristicScore = heuristicScore
-
-	// Use ML detection if available
 	if d.mlDetector != nil {
-		mlResult, err := d.mlDetector.Detect(signals, result.Language, codeString)
+		mlResult, err := d.mlDetector.Detect(heuristicSignals, result.Language, codeString)
+
 		if err != nil {
-			// ML failed, use heuristics only
-			result.Score = heuristicScore
-			result.MLScore = 0.0
+			if d.detectorConfig.IsMLOnly {
+				result.Error = fmt.Errorf("ML inference failed: %w", err)
+				return result
+			}
+			result.Score = hScore
 			result.UsedML = false
 		} else {
-			// ML succeeded
 			result.Score = mlResult.FinalScore
 			result.MLScore = mlResult.MLScore
-			result.HeuristicScore = mlResult.HeuristicScore
 			result.UsedML = mlResult.UsedML
 			result.Confidence = mlResult.Confidence
 		}
 	} else {
-		result.Score = heuristicScore
-		result.MLScore = 0.0
+		result.Score = hScore
 		result.UsedML = false
 	}
 
 	return result
 }
 
-func calculateMaxScore(signals []models.Signal) float64 {
+func calculateHeuristicMaxScore(signals []models.Signal) float64 {
 	if len(signals) == 0 {
 		return 0.0
 	}
@@ -244,32 +225,32 @@ func detectLanguage(path string) string {
 	return "unknown"
 }
 
-/*
- * LOG TRAINING DATA
- * Saves scan results to CSV for ML training
- */
+// LogTrainingData saves scan results to a CSV file for Machine Learning training purposes.
+// It appends to "sentinel_training.csv" and creates the file with a header if it doesn't exist.
 func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
-	file, err := os.OpenFile("sentinel_training.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	trainingDataFile, err := os.OpenFile("sentinel_training.csv", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		return err
 	}
+
 	defer func() {
-		if err := file.Close(); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to close file: %v\n", err)
+		if err := trainingDataFile.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close training data file: %v\n", err)
 		}
 	}()
 
-	writer := csv.NewWriter(file)
+	writer := csv.NewWriter(trainingDataFile)
 	defer writer.Flush()
 
-	info, _ := file.Stat()
-	numFeatures := 25
+	fe := ml.NewFeatureExtractor()
+	info, err := trainingDataFile.Stat()
+	if err != nil {
+		return fmt.Errorf("failed to stat training file: %w", err)
+	}
+
 	if info.Size() == 0 {
-		header := []string{"language_id"}
-		for i := 1; i <= numFeatures; i++ {
-			header = append(header, fmt.Sprintf("f%d", i))
-		}
-		header = append(header, "label")
+		dummyVector := fe.Extract([]models.Signal{}, "unknown", ml.CodeMetrics{})
+		header := append(dummyVector.Names, "label")
 		if err := writer.Write(header); err != nil {
 			return err
 		}
@@ -284,22 +265,15 @@ func (d *Detector) LogTrainingData(results *ScanResults, isAI bool) error {
 		if f.Error != nil {
 			continue
 		}
-
-		langID := languageIDMap[f.Language]
-		if langID == "" {
-			langID = "0"
+		content, err := os.ReadFile(f.Path)
+		if err != nil {
+			continue
 		}
-
-		features := make([]float64, numFeatures)
-		for i, s := range f.Signals {
-			if i < numFeatures {
-				features[i] = s.Score
-			}
-		}
-
-		row := []string{langID}
-		for _, val := range features {
-			row = append(row, strconv.FormatFloat(val, 'f', 4, 64))
+		metrics := ml.ExtractCodeMetrics(string(content))
+		vector := fe.Extract(f.Signals, f.Language, metrics)
+		row := make([]string, 0, len(vector.Features)+1)
+		for _, val := range vector.Features {
+			row = append(row, strconv.FormatFloat(float64(val), 'f', 4, 32))
 		}
 		row = append(row, labelStr)
 

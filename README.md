@@ -13,7 +13,7 @@ Sentinel is a multi-language static analysis tool that detects patterns indicati
 - **Fast & Lightweight** - Single binary, no dependencies. Built with Go for exceptional performance and minimal resource footprint
 - **Multi-Language** - Python, Java, JavaScript, TypeScript, Go, Rust, C/C++, Ruby, PHP, C#, Kotlin, Swift (early support - actively improving)
 - **Detailed Reporting** - JSON and human-readable output formats
-- **Heuristic-Driven Analysis:** Sentinel currently relies on heuristic-based checking (predefined "hard-coded" logic). I am actively working and learning on integrating Machine Learning models to enhance detection.
+- **Hybrid Detection:** Sentinel utilizes a dual-layer verification pipeline, merging **Heuristics-Driven Analysis** with **Machine Learning (ONNX)**.
 
 ## Sample Output
 
@@ -90,6 +90,7 @@ sudo mv sentinel.exe /usr/local/bin/
 ```bash
 ./sentinel
 
+# Heuristics Only
 # Scan current directory
 ./sentinel scan --path .
 
@@ -109,14 +110,17 @@ sudo mv sentinel.exe /usr/local/bin/
 ./sentinel scan --path ./examples/ai --collect --label ai
 ./sentinel scan --path ./examples/human --collect --label human
 
-# Use ML + heuristics (MACHINE LEARNING MODEL IS REQUIRED!)
-./sentinel scan --path . --hybrid --ml-weight 0.7 --verbose
+# Hybrid Mode (Default when --model is provided)
+# Blends ML probability with heuristic patterns using a weighted average.
+./sentinel scan --path . --model ./model/model.onnx --ml-weight 0.7 --verbose
 
-# Heuristics only (no ML)
+# Heuristics Only
+# Ignores the ML model entirely and looks for raw code patterns.
 ./sentinel scan --path . --no-ml --verbose
 
-# ML only (MACHINE LEARNING MODEL IS REQUIRED!)
-./sentinel scan --path . --ml-only --verbose
+# ML Only
+# Forces the detector to rely primarily on the model. 
+./sentinel scan --path . --ml-only --model ./model/model.onnx --verbose
 ```
 
 **Flags:**
@@ -133,13 +137,6 @@ sudo mv sentinel.exe /usr/local/bin/
 - `--no-ml` - Disable ML inference (heuristics only)
 - `--ml-only` - Use ML only (fail if model not available)
 - `--ml-weight` - Weight given to ML score (0.0-1.0)
-
-## Git Diff Scanning
-
-```bash
-# Scan only files changed in PR
-./sentinel scan --git-diff origin/main --threshold 0.75
-```
 
 # CI/CD Integration
 
@@ -196,6 +193,13 @@ pipeline {
         }
     }
 }
+```
+
+## Git Diff Scanning
+
+```bash
+# Scan only files changed in PR
+./sentinel scan --git-diff origin/main --threshold 0.75
 ```
 
 ---
