@@ -2,14 +2,18 @@ FROM golang:1.21-alpine AS builder
 
 WORKDIR /build
 
-RUN apk add --no-cache git make
+RUN apk add --no-cache git make build-base
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -ldflags '-extldflags "-static"' -o sentinel .
+RUN CGO_ENABLED=1 GOOS=linux go build \
+    -a \
+    -installsuffix cgo \
+    -ldflags '-extldflags "-static"' \
+    -o sentinel .
 
 FROM alpine:latest
 
