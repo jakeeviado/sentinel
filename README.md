@@ -1,91 +1,138 @@
-# ⌀ Sentinel
+# ⌀ SENTINEL
 
-**The vigilant guard for code authenticity.**
+SENTINEL is a multi-language static analysis CLI tool designed to assist code reviewers by identifying risky, inconsistent, or unconventional code patterns, especially in AI-assisted development environments.
 
-Sentinel is a multi-language static analysis tool that detects patterns indicative of AI-generated code. It integrates seamlessly into your build process and CI/CD pipelines to help maintain code quality and authenticity.
+It integrates seamlessly into CI/CD pipelines (GitHub Actions, GitLab CI, Jenkins) to enforce code quality, maintainability, and reliability at scale.
 
-> [!WARNING]
-> **Experimental Build:** Sentinel is in active development as a hobby project.
+Built for modern engineering teams embracing AI-assisted development workflows, Sentinel provides an additional layer of insight to support consistent and high-quality codebases.
 
-## Core Features
+**Features**
 
-- **CI/CD Ready** - GitHub Actions, GitLab CI, Jenkins integration
-- **Fast & Lightweight** - Single binary, no dependencies. Built with Go for exceptional performance and minimal resource footprint
+- **CI/CD Ready**
+- **Fast & Lightweight**
 - **Multi-Language** - Python, Java, JavaScript, TypeScript, Go, Rust, C/C++, Ruby, PHP, C#, Kotlin, Swift (early support - actively improving)
-- **Detailed Reporting** - JSON and human-readable output formats
 - **Hybrid Detection:** Sentinel utilizes a dual-layer verification pipeline, merging **Heuristics-Driven Analysis** with **Machine Learning (ONNX)**.
 
-## Sample Output
+**Disclaimer**
+
+Sentinel identifies unconventional or high-risk code patterns using heuristic and machine learning techniques. These patterns may appear in both human-written and AI-assisted code.
+
+Results are probabilistic and may include false positives and false negatives. Sentinel is designed to support code quality and review processes, not to determine authorship or replace human judgment.
+
+
+---
+
+# Quickstart
+
+**Sample Command:**
 
 ```bash
-./sentinel scan --path ./examples/ai/python --verbose
+./sentinel scan --path ./training-sets/ai --verbose --collect --label ai
+./sentinel scan --path ./training-sets/human --verbose --collect --label human
 ```
 
+**Sample Output:**
+
 ```
-Scanning path: ./examples/ai/python
-Threshold: 0.70
-Found 1 files to scan
 ================================================================================
                        ⌀ SENTINEL - Code Detection Report
 ================================================================================
 
-Total Files Scanned:  1
+Detection Mode:       Heuristics Only
+Total Files Scanned:  6
 Files Detected:       1
-Average Score:        0.90
+Average Score:        0.62
 Detection Threshold:  0.70
 
 [!] DETECTED FILES (above threshold):
 --------------------------------------------------------------------------------
-examples\ai\python\ai_generated.py
-   Score: 0.90 | Language: python
+training-sets/ai/java/Calculator.java
+   Score: 0.80 | Language: java
    Signals:
-     • generic_naming (0.90): Very high use of generic variable names
-       Generic name occurrences: 47
+     • comment_density (0.80): Excessive comment density detected (>30%)
+       Comment lines: 47 / 107 (43.9%)
+     • boilerplate_patterns (0.30): Some boilerplate patterns present
+       Boilerplate matches: 2
+
+[?] SUSPICIOUS FILES (below threshold but noteworthy):
+--------------------------------------------------------------------------------
+training-sets/ai/python/ai_generated_calculator.py
+   Score: 0.60 | Language: python
+   Signals:
      • boilerplate_patterns (0.60): Multiple boilerplate patterns detected
-       Boilerplate matches: 5
+       Boilerplate matches: 3
      • formatting_consistency (0.50): Very consistent indentation (possibly AI-generated)
        Unique indentation levels: 3
      • code_complexity (0.30): Low cyclomatic complexity
+       Control flow density: 0.06
+training-sets/ai/python/ai_generated_data_processor.py
+   Score: 0.60 | Language: python
+   Signals:
+     • generic_naming (0.60): High use of generic variable names
+       Generic name occurrences: 42
+     • boilerplate_patterns (0.60): Multiple boilerplate patterns detected
+       Boilerplate matches: 3
+     • code_complexity (0.30): Low cyclomatic complexity
        Control flow density: 0.07
+training-sets/ai/python/ai_generated_string_utils.py
+   Score: 0.60 | Language: python
+   Signals:
+     • boilerplate_patterns (0.60): Multiple boilerplate patterns detected
+       Boilerplate matches: 3
+     • code_complexity (0.30): Low cyclomatic complexity
+       Control flow density: 0.10
+training-sets/ai/java/DataProcessor.java
+   Score: 0.60 | Language: java
+   Signals:
+     • generic_naming (0.60): High use of generic variable names
+       Generic name occurrences: 68
+     • boilerplate_patterns (0.60): Multiple boilerplate patterns detected
+       Boilerplate matches: 3
+     • comment_density (0.50): High comment density (>20%)
+       Comment lines: 58 / 205 (28.3%)
+     • code_complexity (0.30): Low cyclomatic complexity
+       Control flow density: 0.07
+training-sets/ai/java/StringUtils.java
+   Score: 0.50 | Language: java
+   Signals:
+     • comment_density (0.50): High comment density (>20%)
+       Comment lines: 45 / 177 (25.4%)
+     • boilerplate_patterns (0.30): Some boilerplate patterns present
+       Boilerplate matches: 2
 
 ================================================================================
 FAILED: 1 file(s) detected as likely AI-generated
 ================================================================================
+Scanning path: ./training-sets/human
+Threshold: 0.70
+Found 2 files to scan
+Successfully logged results to sentinel_training.csv
+================================================================================
+                       ⌀ SENTINEL - Code Detection Report
+================================================================================
+
+Detection Mode:       Heuristics Only
+Total Files Scanned:  2
+Files Detected:       0
+Average Score:        0.25
+Detection Threshold:  0.70
+
+[?] SUSPICIOUS FILES (below threshold but noteworthy):
+--------------------------------------------------------------------------------
+training-sets/human/python/human_written_calculator.py
+   Score: 0.50 | Language: python
+   Signals:
+     • formatting_consistency (0.50): Very consistent indentation (possibly AI-generated)
+       Unique indentation levels: 3
+     • code_complexity (0.30): Low cyclomatic complexity
+       Control flow density: 0.08
+
+================================================================================
+PASSED: No AI-generated code detected above threshold
+================================================================================
 ```
 
-## Made with Go Language (Why Go?):
-
-- Unlike Java (JVM) or Python, Go compiles directly to a single machine code binary. This allowed me to drop Sentinel into a CI environment and run it instantly without pre-installing any runtimes or libraries.
-- Low memory usage compared to JVM or Node.js-based tools.
-- Rich CLI ecosystem for building command-line interfaces
-
-<img src="https://github.com/ashleymcnamara/gophers/blob/master/This_is_Fine_Gopher.png?raw=true" style="width: 100%;">
-
----
-
-# Installation
-
-## Build from the Source
-
-```bash
-# Clone or extract the project
-cd sentinel
-
-# IMPORTANT: Generate go.sum with correct checksums
-go mod tidy
-
-# Download dependencies
-go mod download
-
-# Build
-go build -o sentinel.exe
-
-# Install (optional)
-sudo mv sentinel.exe /usr/local/bin/
-```
----
-
-# Sample Commands
+**Other Commands:**
 
 ```bash
 ./sentinel
@@ -138,9 +185,33 @@ sudo mv sentinel.exe /usr/local/bin/
 - `--ml-only` - Use ML only (fail if model not available)
 - `--ml-weight` - Weight given to ML score (0.0-1.0)
 
+---
+
+# Installation
+
+**Build from the Source:**
+
+```bash
+# Clone or extract the project
+cd sentinel
+
+# IMPORTANT: Generate go.sum with correct checksums
+go mod tidy
+
+# Download dependencies
+go mod download
+
+# Build
+go build -o sentinel.exe
+
+# Install (optional)
+sudo mv sentinel.exe /usr/local/bin/
+```
+---
+
 # CI/CD Integration
 
-## GitHub Actions
+**GitHub Actions**
 
 ```yaml
 name: SENTINEL CODE SCANNER
@@ -163,7 +234,7 @@ jobs:
         run: ./sentinel scan --path . --threshold 0.75 --fail-on-detection
 ```
 
-## GitLab CI
+**GitLab CI**
 
 ```yaml
 sentinel:
@@ -176,7 +247,7 @@ sentinel:
     - merge_requests
 ```
 
-## Jenkins
+**Jenkins**
 
 ```groovy
 pipeline {
@@ -195,7 +266,7 @@ pipeline {
 }
 ```
 
-## Git Diff Scanning
+**Option for Git Diff Scanning (for CI/CD)**
 
 ```bash
 # Scan only files changed in PR
@@ -207,11 +278,3 @@ pipeline {
 # License
 
 MIT License - see [LICENSE](LICENSE) file for details.
-
-# Disclaimer
-
-Sentinel is a detection tool that identifies patterns commonly associated with AI-generated code. It should be used as one part of a comprehensive code review process, not as the sole arbiter of code authenticity.
-
----
-
-Hell Yeah!
