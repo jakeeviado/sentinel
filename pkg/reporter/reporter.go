@@ -82,7 +82,7 @@ func (r *Reporter) formatFilesForJSON(files []detector.FileResult) []map[string]
 
 func (r *Reporter) reportText(results *detector.ScanResults) error {
 	fmt.Println("================================================================================")
-	fmt.Println("                       ⌀ SENTINEL - Code Detection Report")
+	fmt.Println("                       ⌀ SENTINEL - Code Analysis Report")
 	fmt.Println("================================================================================")
 	fmt.Println()
 
@@ -105,7 +105,7 @@ func (r *Reporter) reportText(results *detector.ScanResults) error {
 	})
 
 	if results.DetectedFiles > 0 {
-		fmt.Println("[!] DETECTED FILES (above threshold):")
+		fmt.Println("[!] HIGH-RISK FILES (above threshold):")
 		fmt.Println("--------------------------------------------------------------------------------")
 
 		for _, file := range sortedFiles {
@@ -124,7 +124,7 @@ func (r *Reporter) reportText(results *detector.ScanResults) error {
 	}
 
 	if suspiciousFiles > 0 && r.config.Verbose {
-		fmt.Println("[?] SUSPICIOUS FILES (below threshold but noteworthy):")
+		fmt.Println("[?] REVIEW RECOMMENDED (below threshold but noteworthy):")
 		fmt.Println("--------------------------------------------------------------------------------")
 
 		for _, file := range sortedFiles {
@@ -137,10 +137,11 @@ func (r *Reporter) reportText(results *detector.ScanResults) error {
 
 	fmt.Println("================================================================================")
 	if results.DetectedFiles > 0 {
-		fmt.Printf("FAILED: %d file(s) detected as likely AI-generated\n", results.DetectedFiles)
+		fmt.Printf("FAILED: %d file(s) require attention (risk threshold exceeded)\n", results.DetectedFiles)
 	} else {
-		fmt.Println("PASSED: No AI-generated code detected above threshold")
+		fmt.Println("PASSED: All files are within acceptable risk thresholds")
 	}
+	fmt.Println("Note: Scores represent heuristic and/or ML-based risk estimates. Review is recommended for flagged files.")
 	fmt.Println("================================================================================")
 
 	return nil
