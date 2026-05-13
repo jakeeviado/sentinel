@@ -1,6 +1,10 @@
 # ⌀ SENTINEL
 
-SENTINEL is a multi-language static analysis CLI tool designed to assist code reviewers by flagging unconventional code patterns, integrating natively into Github Actions, Gitlab CI, and Jenkins pipelines.
+SENTINEL is a multi-language static analysis CLI tool designed to assist code reviewers by identifying risky, inconsistent, or unconventional code patterns, especially in AI-assisted development environments.
+
+It integrates seamlessly into CI/CD pipelines (GitHub Actions, GitLab CI, Jenkins) to enforce code quality, maintainability, and reliability at scale.
+
+Built for modern engineering teams embracing AI-assisted development workflows, Sentinel provides an additional layer of insight to support consistent and high-quality codebases.
 
 **Features**
 
@@ -11,7 +15,10 @@ SENTINEL is a multi-language static analysis CLI tool designed to assist code re
 
 **Disclaimer**
 
-Sentinel is a detection tool that identifies patterns commonly associated with AI-generated code. It should be used as one part of a comprehensive code review process, not as the sole arbiter of code authenticity.
+Sentinel identifies unconventional or high-risk code patterns using heuristic and machine learning techniques. These patterns may appear in both human-written and AI-assisted code.
+
+Results are probabilistic and may include false positives and false negatives. Sentinel is designed to support code quality and review processes, not to determine authorship or replace human judgment.
+
 
 ---
 
