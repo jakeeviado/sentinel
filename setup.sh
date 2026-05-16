@@ -95,9 +95,7 @@ if [ -f "$BINARY_PATH" ]; then
     fi
     echo ""
     echo "For more information, see:"
-    echo "  - QUICKSTART.md    : User guide"
-    echo "  - README.md        : Just a read me"
-    echo "  - PROJECT_STRUCTURE.md : Architecture overview"
+    echo "  - README.md        : Project overview and usage"
     echo ""
 
     # Offer to run example scan

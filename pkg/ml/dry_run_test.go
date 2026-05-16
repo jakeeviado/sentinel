@@ -70,9 +70,9 @@ func RunDryRun(code string, language string) {
 	fmt.Printf("  FINAL AGGREGATE : %.4f\n", result.FinalScore)
 	fmt.Printf("  CONFIDENCE      : %02.1f%%\n", result.Confidence*100)
 
-	verdict := "HUMAN"
-	if result.IsAIGenerated {
-		verdict = "AI GENERATED"
+	verdict := "LOW RISK"
+	if result.IsHighRisk {
+		verdict = "FLAGGED FOR REVIEW"
 	}
 	fmt.Printf("  VERDICT         : %s\n", verdict)
 	fmt.Println("================================================================================")

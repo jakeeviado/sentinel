@@ -1,5 +1,5 @@
-// Package analyzer provides tools for 'heuristic analysis' of code to detect
-// patterns commonly associated with AI-generated content.
+// Package analyzer provides tools for heuristic analysis of code to detect
+// patterns that may indicate elevated review risk in AI-assisted codebases.
 //
 // # CRITICAL: ML PIPELINE SYNCHRONIZATION
 //
@@ -66,7 +66,6 @@ func (a *Analyzer) Analyze(code string, language string) []models.Signal {
 	signals = append(signals, a.checkRepetitivePatterns(code))
 	signals = append(signals, a.checkCodeComplexity(code))
 	signals = append(signals, a.checkFormattingConsistency(code))
-	signals = append(signals, a.checkBoilerplatePatterns(code, language))
 	signals = append(signals, a.checkCommentRedundancy(code))
 	signals = append(signals, a.checkEmojiSentiment(code))
 	signals = append(signals, a.checkIdentifierOrder(code))
@@ -74,8 +73,8 @@ func (a *Analyzer) Analyze(code string, language string) []models.Signal {
 	return signals
 }
 
-// This function calculates the ratio of comments to total lines.
-// AI models tend to produce highly documented code, leading to higher density.
+// Calculates comment-to-code ratio. Unusually high density
+// can be a risk signal in review pipelines.
 func (a *Analyzer) checkCommentDensity(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	if len(lines) == 0 {
@@ -116,8 +115,8 @@ func (a *Analyzer) checkCommentDensity(code string) models.Signal {
 	}
 }
 
-// This function identifies the frequency of placeholder variable names
-// like 'temp', 'data', or 'obj', which are common in AI-generated snippets.
+// Flags heavy use of placeholder names.
+// High frequency raises maintainability and clarity risk.
 func (a *Analyzer) checkGenericNaming(code string) models.Signal {
 	genericNames := []string{
 		"temp", "tmp", "data", "result", "item", "value", "obj", "elem",
@@ -160,8 +159,8 @@ func (a *Analyzer) checkGenericNaming(code string) models.Signal {
 	}
 }
 
-// This function looks for identical lines of code.
-// High repetition can be a sign of limited variation in generated output.
+// Looks for duplicated lines across the file.
+// High repetition often signals copy-paste patterns or low code quality.
 func (a *Analyzer) checkRepetitivePatterns(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	if len(lines) < 10 {
@@ -207,8 +206,8 @@ func (a *Analyzer) checkRepetitivePatterns(code string) models.Signal {
 	}
 }
 
-// This function measures control flow density.
-// AI code often follows simpler, more linear paths compared to complex human logic.
+// Measures control flow density across the file.
+// Unusually low complexity can indicate shallow or auto-generated logic.
 func (a *Analyzer) checkCodeComplexity(code string) models.Signal {
 	controlFlowKeywords := []string{
 		"if", "else", "switch", "case", "for", "while", "do",
@@ -256,8 +255,8 @@ func (a *Analyzer) checkCodeComplexity(code string) models.Signal {
 	}
 }
 
-// This fucntion evaluates how strictly indentation is followed.
-// Perfect or near-perfect consistency is often a hallmark of programmatic generation.
+// Evaluates indentation uniformity. Suspiciously rigid
+// consistency can indicate non-human authorship.
 func (a *Analyzer) checkFormattingConsistency(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	if len(lines) < 5 {
@@ -288,7 +287,7 @@ func (a *Analyzer) checkFormattingConsistency(code string) models.Signal {
 
 	if uniqueIndents <= 3 && len(lines) > 20 {
 		score = 0.5
-		description = "Very consistent indentation (possibly AI-generated)"
+		description = "Unusually rigid indentation uniformity across a large file"
 	} else {
 		score = 0.0
 		description = "Normal formatting variation"
@@ -302,68 +301,8 @@ func (a *Analyzer) checkFormattingConsistency(code string) models.Signal {
 	}
 }
 
-// This function searches for common AI signatures and standard templates
-// based on the specific programming language.
-// (BAD IMPLEMENTATION FOR NOW)
-func (a *Analyzer) checkBoilerplatePatterns(code string, language string) models.Signal {
-	boilerplatePatterns := map[string][]string{
-		"python": {
-			"def main():",
-			"if __name__ == \"__main__\":",
-			"# TODO:",
-			"# Example usage:",
-			"# Initialize",
-		},
-		"java": {
-			"public static void main",
-			"// TODO:",
-			"// Example:",
-			"@Override",
-		},
-		"javascript": {
-			"// TODO:",
-			"// Example:",
-			"export default",
-			"const config =",
-		},
-	}
-
-	patterns, ok := boilerplatePatterns[language]
-	if !ok {
-		return models.Signal{Name: "boilerplate_patterns", Score: 0.0}
-	}
-
-	matches := 0
-	for _, pattern := range patterns {
-		if strings.Contains(code, pattern) {
-			matches++
-		}
-	}
-
-	var score float64
-	var description string
-
-	if matches >= 3 {
-		score = 0.6
-		description = "Multiple boilerplate patterns detected"
-	} else if matches >= 2 {
-		score = 0.3
-		description = "Some boilerplate patterns present"
-	} else {
-		score = 0.0
-		description = "Minimal boilerplate"
-	}
-
-	return models.Signal{
-		Name:        "boilerplate_patterns",
-		Score:       score,
-		Description: description,
-		Evidence:    formatEvidence("Boilerplate matches: %d", matches),
-	}
-}
-
-// This function flags comments that merely repeat the code logic.
-// High redundancy is a strong indicator of AI-generated "explanatory" style.
+// Flags inline comments that closely mirror the surrounding code.
+// High overlap can indicate over-explained or low-signal documentation.
 func (a *Analyzer) checkCommentRedundancy(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	redundantCount := 0
@@ -412,13 +351,13 @@ func (a *Analyzer) checkCommentRedundancy(code string) models.Signal {
 	return models.Signal{
 		Name:        "comment_redundancy",
 		Score:       score,
-		Description: "Checks if comments repeat the code logic unnecessarily",
+		Description: "High comment-to-code overlap may indicate low-quality or over-explained code",
 		Evidence:    formatEvidence("Redundant comments: %d / %d", redundantCount, totalComments),
 	}
 }
 
-// This method scans for specific "hype" emojis or the most commong ones
-// that AI models frequently use in comments and log messages.
+// Scans for clusters of emojis in comments and logger messages,
+// which are an uncommon pattern in production codebases.
 func (a *Analyzer) checkEmojiSentiment(code string) models.Signal {
 	aiHypeEmojis := []string{"🚀", "✨", "✅", "💡", "🛠️", "🤖"}
 
@@ -439,13 +378,13 @@ func (a *Analyzer) checkEmojiSentiment(code string) models.Signal {
 
 	if variety >= 3 || emojiMatches > 5 {
 		score = 0.8
-		description = "High density of AI-typical 'hype' emojis"
+		description = "High density of informal emojis in production code"
 	} else if variety >= 1 {
 		score = 0.3
-		description = "Presence of AI-typical emojis detected"
+		description = "Informal emojis detected in comments or log messages"
 	} else {
 		score = 0.0
-		description = "No AI-typical emoji patterns found"
+		description = "No typical emoji patterns found"
 	}
 
 	evidenceParts := []string{}
@@ -461,8 +400,8 @@ func (a *Analyzer) checkEmojiSentiment(code string) models.Signal {
 	}
 }
 
-// This method checks if lists of constants, variables, or keys
-// are sorted perfectly alphabetically, which is a common robotic generation trait.
+// Checks whether large blocks of identifiers are perfectly alphabetically sorted.
+// Rarely occurs naturally; worth flagging for manual review.
 func (a *Analyzer) checkIdentifierOrder(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	var currentBlock []string
@@ -492,7 +431,7 @@ func (a *Analyzer) checkIdentifierOrder(code string) models.Signal {
 	return models.Signal{
 		Name:        "identifier_order",
 		Score:       score,
-		Description: "Detects perfectly alphabetical ordering in variable or constant blocks",
+		Description: "Large identifier blocks in perfect alphabetical order warrant a closer look",
 		Evidence:    formatEvidence("Perfectly sorted blocks (6+ items): %d", perfectlySortedBlocks),
 	}
 }
@@ -507,9 +446,8 @@ func (a *Analyzer) isSorted(list []string) bool {
 	return true
 }
 
-// This method evaluates the frequency of safety checks.
-// AI code often includes an unnaturally high ratio of error/nil checks
-// compared to actual functional logic.
+// Evaluates the ratio of defensive checks to functional logic.
+// A heavily skewed ratio can indicate over-cautious or templated error handling.
 func (a *Analyzer) checkDefensiveRatio(code string) models.Signal {
 	lines := strings.Split(code, "\n")
 	defensePatterns := []string{
@@ -550,10 +488,10 @@ func (a *Analyzer) checkDefensiveRatio(code string) models.Signal {
 
 	if ratio > 0.5 && logicCount > 5 {
 		score = 0.7
-		description = "Extremely high ratio of defensive safety checks"
+		description = "Disproportionately high ratio of error checks to functional logic"
 	} else if ratio > 0.3 {
 		score = 0.4
-		description = "High defensive programming density"
+		description = "Elevated defensive check density relative to logic"
 	}
 
 	return models.Signal{

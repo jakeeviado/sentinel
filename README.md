@@ -8,10 +8,16 @@ Built for modern engineering teams embracing AI-assisted development workflows, 
 
 **Features**
 
-- **CI/CD Ready**
-- **Fast & Lightweight**
-- **Multi-Language** - Python, Java, JavaScript, TypeScript, Go, Rust, C/C++, Ruby, PHP, C#, Kotlin, Swift (early support - actively improving)
-- **Hybrid Detection:** Sentinel utilizes a dual-layer verification pipeline, merging **Heuristics-Driven Analysis** with **Machine Learning (ONNX)**.
+- **Multi-Language** — Python, Java, JavaScript, TypeScript, Go, Rust, C/C++, Ruby, PHP, C#, Kotlin, Swift
+- **Hybrid Detection** — Combines heuristic signal analysis with an ONNX ML model; supports heuristics-only, ML-only, or blended scoring
+- **Git Diff Scanning** — Scan only files changed in a PR or branch (`--git-diff`)
+- **CI/CD Integration** — Works out of the box with GitHub Actions, GitLab CI, and Jenkins; supports `--fail-on-detection` for automated gates
+- **JSON Output** — Machine-readable results for pipeline consumption
+- **Configurable Thresholds** — Tune sensitivity per project via flags or `.sentinel.yaml`
+- **Training Data Collection** — Built-in tooling to collect labeled scan results for model retraining
+- **Fast & Lightweight** — Single binary, no runtime dependencies
+
+--- 
 
 **Disclaimer**
 
@@ -22,113 +28,87 @@ Results are probabilistic and may include false positives and false negatives. S
 
 ---
 
-# Quickstart
+# Heuristics
+
+Sentinel evaluates code against the following risk signals:
+
+| Signal | Description |
+|---|---|
+| `comment_density` | Calculates comment-to-code ratio. Unusually high density can indicate over-documented or templated code. |
+| `generic_naming` | Flags heavy use of placeholder names like `temp`, `data`, or `obj`. High frequency raises maintainability and clarity risk. |
+| `repetitive_patterns` | Looks for duplicated lines across the file. High repetition often signals copy-paste patterns or low code quality. |
+| `code_complexity` | Measures control flow density. Unusually low complexity can indicate shallow or auto-generated logic. |
+| `formatting_consistency` | Evaluates indentation uniformity. Suspiciously rigid consistency across a large file is worth flagging. |
+| `comment_redundancy` | Flags inline comments that closely mirror the surrounding code. High overlap may indicate over-explained or low-signal documentation. |
+| `emoji_sentiment` | Scans for clusters of informal emojis in comments or log messages, which are uncommon in production codebases. |
+| `identifier_order` | Checks whether large blocks of identifiers are in perfect alphabetical order. Rarely occurs naturally; worth a closer look. |
+| `defensive_ratio` | Evaluates the ratio of defensive checks to functional logic. A heavily skewed ratio can indicate templated error handling. |
+
+> All signals produce a score from `0.0` to `1.0`. Scores are combined into a final risk score compared against the configured `--threshold`.
+
+---
+
+# Usage Example
 
 **Sample Command:**
 
 ```bash
-./sentinel scan --path ./training-sets/ai --verbose --collect --label ai
-./sentinel scan --path ./training-sets/human --verbose --collect --label human
+./sentinel scan --path ./examples --verbose
 ```
 
 **Sample Output:**
 
 ```
-================================================================================
-                       ⌀ SENTINEL - Code Detection Report
-================================================================================
-
-Detection Mode:       Heuristics Only
-Total Files Scanned:  6
-Files Detected:       1
-Average Score:        0.62
-Detection Threshold:  0.70
-
-[!] DETECTED FILES (above threshold):
---------------------------------------------------------------------------------
-training-sets/ai/java/Calculator.java
-   Score: 0.80 | Language: java
-   Signals:
-     • comment_density (0.80): Excessive comment density detected (>30%)
-       Comment lines: 47 / 107 (43.9%)
-     • boilerplate_patterns (0.30): Some boilerplate patterns present
-       Boilerplate matches: 2
-
-[?] SUSPICIOUS FILES (below threshold but noteworthy):
---------------------------------------------------------------------------------
-training-sets/ai/python/ai_generated_calculator.py
-   Score: 0.60 | Language: python
-   Signals:
-     • boilerplate_patterns (0.60): Multiple boilerplate patterns detected
-       Boilerplate matches: 3
-     • formatting_consistency (0.50): Very consistent indentation (possibly AI-generated)
-       Unique indentation levels: 3
-     • code_complexity (0.30): Low cyclomatic complexity
-       Control flow density: 0.06
-training-sets/ai/python/ai_generated_data_processor.py
-   Score: 0.60 | Language: python
-   Signals:
-     • generic_naming (0.60): High use of generic variable names
-       Generic name occurrences: 42
-     • boilerplate_patterns (0.60): Multiple boilerplate patterns detected
-       Boilerplate matches: 3
-     • code_complexity (0.30): Low cyclomatic complexity
-       Control flow density: 0.07
-training-sets/ai/python/ai_generated_string_utils.py
-   Score: 0.60 | Language: python
-   Signals:
-     • boilerplate_patterns (0.60): Multiple boilerplate patterns detected
-       Boilerplate matches: 3
-     • code_complexity (0.30): Low cyclomatic complexity
-       Control flow density: 0.10
-training-sets/ai/java/DataProcessor.java
-   Score: 0.60 | Language: java
-   Signals:
-     • generic_naming (0.60): High use of generic variable names
-       Generic name occurrences: 68
-     • boilerplate_patterns (0.60): Multiple boilerplate patterns detected
-       Boilerplate matches: 3
-     • comment_density (0.50): High comment density (>20%)
-       Comment lines: 58 / 205 (28.3%)
-     • code_complexity (0.30): Low cyclomatic complexity
-       Control flow density: 0.07
-training-sets/ai/java/StringUtils.java
-   Score: 0.50 | Language: java
-   Signals:
-     • comment_density (0.50): High comment density (>20%)
-       Comment lines: 45 / 177 (25.4%)
-     • boilerplate_patterns (0.30): Some boilerplate patterns present
-       Boilerplate matches: 2
-
-================================================================================
-FAILED: 1 file(s) detected as likely AI-generated
-================================================================================
-Scanning path: ./training-sets/human
+Scanning path: ./examples
 Threshold: 0.70
-Found 2 files to scan
-Successfully logged results to sentinel_training.csv
+Found 5 files to scan
+
 ================================================================================
-                       ⌀ SENTINEL - Code Detection Report
+                       ⌀ SENTINEL - Code Analysis Report
 ================================================================================
 
 Detection Mode:       Heuristics Only
-Total Files Scanned:  2
-Files Detected:       0
-Average Score:        0.25
+Total Files Scanned:  5
+Files Detected:       2
+Average Score:        0.54
 Detection Threshold:  0.70
 
-[?] SUSPICIOUS FILES (below threshold but noteworthy):
+[!] HIGH-RISK FILES (above threshold):
 --------------------------------------------------------------------------------
-training-sets/human/python/human_written_calculator.py
-   Score: 0.50 | Language: python
+examples\flagged\python\flagged_1.py
+   Score: 0.90 | Language: python
    Signals:
-     • formatting_consistency (0.50): Very consistent indentation (possibly AI-generated)
+     • generic_naming (0.90): Very high use of generic variable names
+       Generic name occurrences: 47
+     • formatting_consistency (0.50): Unusually rigid indentation uniformity across a large file
        Unique indentation levels: 3
      • code_complexity (0.30): Low cyclomatic complexity
-       Control flow density: 0.08
+       Control flow density: 0.07
+examples\flagged\python\flagged_2.py
+   Score: 0.80 | Language: python
+   Signals:
+     • emoji_sentiment (0.80): High density of informal emojis in production code
+       Emojis found: 🚀 (1), ✨ (1), ✅ (1)
+     • comment_density (0.50): High comment density (>20%)
+       Comment lines: 5 / 22 (22.7%)
+     • formatting_consistency (0.50): Unusually rigid indentation uniformity across a large file
+       Unique indentation levels: 3
+
+[?] REVIEW RECOMMENDED (below threshold but noteworthy):
+--------------------------------------------------------------------------------
+examples\flagged\python\flagged_3.py
+   Score: 0.60 | Language: python
+   Signals:
+     • identifier_order (0.60): Large identifier blocks in perfect alphabetical order warrant a closer look
+       Perfectly sorted blocks (6+ items): 1
+     • formatting_consistency (0.50): Unusually rigid indentation uniformity across a large file
+       Unique indentation levels: 2
+     • emoji_sentiment (0.30): Informal emojis detected in comments or log messages
+       Emojis found: ✨ (1), 🤖 (1)
 
 ================================================================================
-PASSED: No AI-generated code detected above threshold
+FAILED: 2 file(s) require attention (risk threshold exceeded)
+Note: Scores represent heuristic and/or ML-based risk estimates. Review is recommended for flagged files.
 ================================================================================
 ```
 
@@ -137,11 +117,10 @@ PASSED: No AI-generated code detected above threshold
 ```bash
 ./sentinel
 
-# Heuristics Only
 # Scan current directory
 ./sentinel scan --path .
 
-# Scan with specific treshold
+# Scan with specific threshold
 ./sentinel scan --path ./src --threshold 0.8
 
 # Scan specific language/s
@@ -150,11 +129,11 @@ PASSED: No AI-generated code detected above threshold
 # Output as JSON
 ./sentinel scan --path . --json
 
-# Build fails if a possible AI generated code detected
+# Fail build if high-risk patterns are detected above threshold
 ./sentinel scan --path . --fail-on-detection --threshold 0.75
 
 # Collect training data for Machine Learning Model (directory should be ready inside the project)
-./sentinel scan --path ./examples/ai --collect --label ai
+./sentinel scan --path ./examples/flagged --collect --label flagged
 ./sentinel scan --path ./examples/human --collect --label human
 
 # Hybrid Mode (Default when --model is provided)
@@ -174,20 +153,20 @@ PASSED: No AI-generated code detected above threshold
 - `--path, -p` - Path to scan (default: current directory)
 - `--languages, -l` - Comma-separated list of languages to scan
 - `--threshold, -t` - Detection threshold 0.0-1.0 (default: 0.7)
-- `--fail-on-detection` - Exit with error code if AI code detected
+- `--fail-on-detection` - Exit with error code if a risky code is detected
 - `--exclude` - Paths to exclude from scanning
 - `--verbose` - Verbose output with detailed signals
 - `--json` - Output results in JSON format
 - `--collect` - Save scan results to local training CSV
-- `--label` - Label for training data: 'ai' or 'human'
+- `--label` - Label for training data: 'flagged' or 'human'
 - `--model` - Path to ONNX model file
 - `--no-ml` - Disable ML inference (heuristics only)
 - `--ml-only` - Use ML only (fail if model not available)
 - `--ml-weight` - Weight given to ML score (0.0-1.0)
+- `--git-diff` - Scan only files changed against the specified branch
 
----
 
-# Installation
+# Build & Installation
 
 **Build from the Source:**
 
@@ -203,11 +182,31 @@ go mod download
 
 # Build
 go build -o sentinel.exe
-
-# Install (optional)
-sudo mv sentinel.exe /usr/local/bin/
 ```
----
+
+### Installation (optional)
+
+**Linux/macOS:**
+```bash
+sudo mv sentinel /usr/local/bin/
+```
+
+**Windows (PowerShell as Administrator):**
+```powershell
+# Create a tools directory and add to PATH (one-time setup)
+New-Item -ItemType Directory -Force -Path "C:\tools"
+Move-Item sentinel.exe "C:\tools\sentinel.exe"
+[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\tools", "Machine")
+```
+
+**To uninstall (Windows):**
+```powershell
+Remove-Item "C:\tools\sentinel.exe"
+```
+```bash
+# Linux/macOS
+sudo rm /usr/local/bin/sentinel
+```
 
 # CI/CD Integration
 
@@ -272,6 +271,58 @@ pipeline {
 # Scan only files changed in PR
 ./sentinel scan --git-diff origin/main --threshold 0.75
 ```
+
+---
+
+# Project Configuration
+
+Sentinel supports a `.sentinel.yaml` config file for persistent settings, so you don't have to pass flags every time.
+
+**Setup:**
+```bash
+cp .sentinel.example.yaml .sentinel.yaml
+```
+
+Sentinel automatically loads `.sentinel.yaml` from the current directory or `$HOME`.
+
+**Example `.sentinel.yaml`:**
+
+```yaml
+# Detection threshold (0.0 - 1.0)
+# Files scoring above this value are flagged for review.
+threshold: 0.70
+
+# Languages to scan (leave empty to scan all supported languages)
+languages:
+  - python
+  - java
+  - javascript
+  - typescript
+  - go
+
+# Paths to exclude from scanning (glob patterns supported)
+exclude:
+  - "vendor/*"
+  - "node_modules/*"
+  - ".git/*"
+  - "*.min.js"
+  - "*.test.js"
+  - "*.spec.py"
+  - "*_test.go"
+  - "dist/*"
+  - "build/*"
+
+# Verbose output (show detailed signal breakdown per file)
+verbose: false
+
+# JSON output format (useful for CI/CD pipelines)
+json: false
+
+# Fail build if any file exceeds the threshold
+fail_on_detection: true
+```
+
+> CLI flags always take precedence over config file values.
 
 ---
 
