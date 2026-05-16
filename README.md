@@ -23,7 +23,7 @@ Built for modern engineering teams embracing AI-assisted development workflows, 
 
 Sentinel identifies unconventional or high-risk code patterns using heuristic and machine learning techniques. These patterns may appear in both human-written and AI-assisted code.
 
-Results are probabilistic and may include false positives and false negatives. Sentinel is designed to support code quality and review processes, not to determine authorship or replace human judgment.
+Results are probabilistic and may include false positives and false negatives. Sentinel is designed to support code quality and review processes — **not to determine authorship or replace human judgment.**.
 
 
 ---
