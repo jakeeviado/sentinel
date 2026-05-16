@@ -81,6 +81,7 @@ func (r *Reporter) formatFilesForJSON(files []detector.FileResult) []map[string]
 }
 
 func (r *Reporter) reportText(results *detector.ScanResults) error {
+	fmt.Println()
 	fmt.Println("================================================================================")
 	fmt.Println("                       ⌀ SENTINEL - Code Analysis Report")
 	fmt.Println("================================================================================")

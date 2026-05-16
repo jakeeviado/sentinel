@@ -82,7 +82,7 @@ func NewFeatureExtractor() *FeatureExtractor {
 		},
 		featureRegistry: []string{
 			"comment_density", "generic_naming", "repetitive_patterns",
-			"code_complexity", "formatting_consistency", "boilerplate_patterns",
+			"code_complexity", "formatting_consistency",
 			"comment_redundancy", "emoji_sentiment", "identifier_order", "defensive_ratio",
 		},
 	}

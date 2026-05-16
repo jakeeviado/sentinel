@@ -31,8 +31,8 @@ var (
 
 var scanCmd = &cobra.Command{
 	Use:   "scan",
-	Short: "Scan code for AI-generated patterns",
-	Long: `Scan source code files to detect patterns indicative of AI generation.
+	Short: "Scan code for elevated-risk patterns",
+	Long: `Scan source code files for patterns that may indicate elevated risk in AI-assisted workflows.
 
 Examples:
   # Scan current directory
@@ -41,10 +41,10 @@ Examples:
   # Scan with specific languages
   sentinel scan --path ./src --languages python,java,javascript
 
-  # Scan git diff against main branch
+  # Scan git diff against main/master branch
   sentinel scan --git-diff origin/main --threshold 0.75
 
-  # Fail CI build if AI code detected
+  # Fail CI build if high-risk patterns detected
   sentinel scan --path . --fail-on-detection --threshold 0.8`,
 	RunE: runScan,
 }
@@ -55,11 +55,11 @@ func init() {
 	scanCmd.Flags().StringVarP(&scanPath, "path", "p", ".", "path to scan")
 	scanCmd.Flags().StringSliceVarP(&languages, "languages", "l", []string{}, "languages to scan (e.g., python,java,go)")
 	scanCmd.Flags().Float64VarP(&threshold, "threshold", "t", 0.7, "detection threshold (0.0-1.0)")
-	scanCmd.Flags().BoolVar(&failOnDetect, "fail-on-detection", false, "exit with error code if AI code detected")
+	scanCmd.Flags().BoolVar(&failOnDetect, "fail-on-detection", false, "exit with error code if high-risk patterns are detected")
 	scanCmd.Flags().StringSliceVar(&excludePaths, "exclude", []string{}, "paths to exclude from scanning")
 	scanCmd.Flags().StringVar(&gitDiff, "git-diff", "", "scan only files changed in git diff against specified branch")
 	scanCmd.Flags().BoolVar(&trainingData, "collect", false, "save scan results to local training CSV")
-	scanCmd.Flags().StringVar(&label, "label", "", "label for training data: 'ai' or 'human'")
+	scanCmd.Flags().StringVar(&label, "label", "", "label for training data: 'flagged' or 'human'")
 	scanCmd.Flags().StringVar(&modelPath, "model", "", "path to ONNX model file")
 	scanCmd.Flags().BoolVar(&noML, "no-ml", false, "disable ML inference (heuristics only)")
 	scanCmd.Flags().BoolVar(&mlOnly, "ml-only", false, "use ML only (fail if model not available)")
@@ -115,12 +115,12 @@ func runScan(cmd *cobra.Command, args []string) error {
 	}
 
 	if trainingData {
-		if label != "ai" && label != "human" {
-			return fmt.Errorf("please specify --label as 'ai' or 'human' when using --collect")
+		if label != "flagged" && label != "human" {
+			return fmt.Errorf("please specify --label as 'flagged' or 'human' when using --collect")
 		}
 
-		isAI := (label == "ai")
-		if err := det.LogTrainingData(results, isAI); err != nil {
+		isFlagged := (label == "flagged")
+		if err := det.LogTrainingData(results, isFlagged); err != nil {
 			fmt.Fprintf(os.Stderr, "Warning: Failed to log training data: %v\n", err)
 		} else {
 			fmt.Println("Successfully logged results to sentinel_training.csv")
@@ -138,9 +138,9 @@ func runScan(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to generate report: %w", err)
 	}
 
-	// CHECK IF WE SHOULD FAIL THE BUILD :(
+	// Fail the build if detections exceed the configured threshold.
 	if failOnDetect && results.HasDetections(threshold) {
-		return fmt.Errorf("AI-generated code detected above threshold %.2f", threshold)
+		return fmt.Errorf("High-risk code detected above threshold %.2f", threshold)
 	}
 
 	return nil

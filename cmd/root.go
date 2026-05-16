@@ -20,15 +20,15 @@ const banner = `
    ▄█    ███   ███    ███ ███   ███     ███     ███  ███   ███   ███    ███ ███▌    ▄
  ▄████████▀    ██████████  ▀█   █▀     ▄████▀   █▀    ▀█   █▀    ██████████ █████▄▄██
                                                                          ▀
-                    ⌀ The vigilant guard for code authenticity
+                    ⌀ The vigilant guard for code quality
 `
 
 var rootCmd = &cobra.Command{
 	Use:   "sentinel",
-	Short: "⌀ Sentinel - The vigilant guard for code authenticity.",
+	Short: "⌀ Sentinel - A risk analysis tool for AI-assisted codebases.",
 	Long: banner + `
 Sentinel uses a hybrid approach (Heuristics + Machine Learning) to
-detect patterns indicative of AI-generated source code.
+detect elevated-risk patterns in source code.
 
 ` + "── LANGUAGES SUPPORTED ──────────────────────────────────────────" + `
   Python, Java, JavaScript, TypeScript, Go, Rust, C++, Ruby, PHP,

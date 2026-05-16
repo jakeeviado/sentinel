@@ -83,7 +83,7 @@ type DetectionResult struct {
 	MLScore        float64
 	UsedML         bool
 	Confidence     float64
-	IsAIGenerated  bool
+	IsHighRisk     bool
 }
 
 func (m *MLDetector) Detect(signals []models.Signal, language string, code string) (DetectionResult, error) {
@@ -118,7 +118,7 @@ func (m *MLDetector) Detect(signals []models.Signal, language string, code strin
 		FinalScore:     finalScore,
 		Confidence:     0.7,
 		UsedML:         true,
-		IsAIGenerated:  finalScore >= m.config.MinConfidence,
+		IsHighRisk:     finalScore >= m.config.MinConfidence,
 	}, nil
 }
 
