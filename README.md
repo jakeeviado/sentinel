@@ -1,63 +1,32 @@
-# ⌀ SENTINEL
+## Sentinel
 
-SENTINEL is a multi-language static analysis CLI tool designed to assist code reviewers by identifying risky, inconsistent, or unconventional code patterns, especially in AI-assisted development environments.
-
-It integrates seamlessly into CI/CD pipelines (GitHub Actions, GitLab CI, Jenkins) to enforce code quality, maintainability, and reliability at scale.
-
-Built for modern engineering teams embracing AI-assisted development workflows, Sentinel provides an additional layer of insight to support consistent and high-quality codebases.
+Multi-language static analysis CLI tool that identifies risky, inconsistent, or unconventional code patterns. Designed to assist code reviewers and maintain quality in AI-assisted development environments.
 
 **Features**
+* **Multi-Language Support**: Python, Java, JS/TS, Go, Rust, C/C++, Ruby, PHP, C#, Kotlin, Swift.
+* **Hybrid Detection**: Combines heuristic analysis with ONNX-based ML models.
+* **CI/CD Ready**: Native integration with GitHub Actions, GitLab CI, and Jenkins.
+* **Workflow Integration**: Supports Git Diff scanning and automated build gating (`--fail-on-detection`).
+* **Extensible**: Configurable thresholds via CLI flags or `.sentinel.yaml`.
+* **Training Loop**: Built-in tools to collect and label scan results for model retraining.
+---
+**Risk Signals** - Evaluates code against the following metrics (scored 0.0–1.0):
 
-- **Multi-Language** — Python, Java, JavaScript, TypeScript, Go, Rust, C/C++, Ruby, PHP, C#, Kotlin, Swift
-- **Hybrid Detection** — Combines heuristic signal analysis with an ONNX ML model; supports heuristics-only, ML-only, or blended scoring
-- **Git Diff Scanning** — Scan only files changed in a PR or branch (`--git-diff`)
-- **CI/CD Integration** — Works out of the box with GitHub Actions, GitLab CI, and Jenkins; supports `--fail-on-detection` for automated gates
-- **JSON Output** — Machine-readable results for pipeline consumption
-- **Configurable Thresholds** — Tune sensitivity per project via flags or `.sentinel.yaml`
-- **Training Data Collection** — Built-in tooling to collect labeled scan results for model retraining
-- **Fast & Lightweight** — Single binary, no runtime dependencies
-
---- 
-
-**Disclaimer**
-
-Sentinel identifies unconventional or high-risk code patterns using heuristic and machine learning techniques. These patterns may appear in both human-written and AI-assisted code.
-
-Results are probabilistic and may include false positives and false negatives. Sentinel is designed to support code quality and review processes — **not to determine authorship or replace human judgment.**.
-
+| Signal                   | Description                                      |
+| :----------------------- | :----------------------------------------------- |
+| `comment_density`        | Comment-to-code ratio.                           |
+| `generic_naming`         | Use of placeholder names (e.g., `temp`, `data`). |
+| `repetitive_patterns`    | File-level code duplication.                     |
+| `code_complexity`        | Control flow density.                            |
+| `formatting_consistency` | Indentation/style uniformity.                    |
+| `comment_redundancy`     | Comments that mirror code logic.                 |
+| `emoji_sentiment`        | Presence of non-standard emojis.                 |
+| `identifier_order`       | Suspiciously perfect alphabetical ordering.      |
+| `defensive_ratio`        | Ratio of error handling to functional logic.     |
 
 ---
 
-# Heuristics
-
-Sentinel evaluates code against the following risk signals:
-
-| Signal | Description |
-|---|---|
-| `comment_density` | Calculates comment-to-code ratio. Unusually high density can indicate over-documented or templated code. |
-| `generic_naming` | Flags heavy use of placeholder names like `temp`, `data`, or `obj`. High frequency raises maintainability and clarity risk. |
-| `repetitive_patterns` | Looks for duplicated lines across the file. High repetition often signals copy-paste patterns or low code quality. |
-| `code_complexity` | Measures control flow density. Unusually low complexity can indicate shallow or auto-generated logic. |
-| `formatting_consistency` | Evaluates indentation uniformity. Suspiciously rigid consistency across a large file is worth flagging. |
-| `comment_redundancy` | Flags inline comments that closely mirror the surrounding code. High overlap may indicate over-explained or low-signal documentation. |
-| `emoji_sentiment` | Scans for clusters of informal emojis in comments or log messages, which are uncommon in production codebases. |
-| `identifier_order` | Checks whether large blocks of identifiers are in perfect alphabetical order. Rarely occurs naturally; worth a closer look. |
-| `defensive_ratio` | Evaluates the ratio of defensive checks to functional logic. A heavily skewed ratio can indicate templated error handling. |
-
-> All signals produce a score from `0.0` to `1.0`. Scores are combined into a final risk score compared against the configured `--threshold`.
-
----
-
-# Usage Example
-
-**Sample Command:**
-
-```bash
-./sentinel scan --path ./examples --verbose
-```
-
-**Sample Output:**
-
+**Sample CLI Output**
 ```
 Scanning path: ./examples
 Threshold: 0.70
@@ -75,15 +44,6 @@ Detection Threshold:  0.70
 
 [!] HIGH-RISK FILES (above threshold):
 --------------------------------------------------------------------------------
-examples\flagged\python\flagged_1.py
-   Score: 0.90 | Language: python
-   Signals:
-     • generic_naming (0.90): Very high use of generic variable names
-       Generic name occurrences: 47
-     • formatting_consistency (0.50): Unusually rigid indentation uniformity across a large file
-       Unique indentation levels: 3
-     • code_complexity (0.30): Low cyclomatic complexity
-       Control flow density: 0.07
 examples\flagged\python\flagged_2.py
    Score: 0.80 | Language: python
    Signals:
@@ -107,12 +67,12 @@ examples\flagged\python\flagged_3.py
        Emojis found: ✨ (1), 🤖 (1)
 
 ================================================================================
-FAILED: 2 file(s) require attention (risk threshold exceeded)
+FAILED: 1 file(s) require attention (risk threshold exceeded)
 Note: Scores represent heuristic and/or ML-based risk estimates. Review is recommended for flagged files.
 ================================================================================
 ```
 
-**Other Commands:**
+**Available Commands:**
 
 ```bash
 ./sentinel
@@ -165,50 +125,9 @@ Note: Scores represent heuristic and/or ML-based risk estimates. Review is recom
 - `--ml-weight` - Weight given to ML score (0.0-1.0)
 - `--git-diff` - Scan only files changed against the specified branch
 
+---
 
-# Build & Installation
-
-**Build from the Source:**
-
-```bash
-# Clone or extract the project
-cd sentinel
-
-# IMPORTANT: Generate go.sum with correct checksums
-go mod tidy
-
-# Download dependencies
-go mod download
-
-# Build
-go build -o sentinel.exe
-```
-
-### Installation (optional)
-
-**Linux/macOS:**
-```bash
-sudo mv sentinel /usr/local/bin/
-```
-
-**Windows (PowerShell as Administrator):**
-```powershell
-# Create a tools directory and add to PATH (one-time setup)
-New-Item -ItemType Directory -Force -Path "C:\tools"
-Move-Item sentinel.exe "C:\tools\sentinel.exe"
-[Environment]::SetEnvironmentVariable("Path", $env:Path + ";C:\tools", "Machine")
-```
-
-**To uninstall (Windows):**
-```powershell
-Remove-Item "C:\tools\sentinel.exe"
-```
-```bash
-# Linux/macOS
-sudo rm /usr/local/bin/sentinel
-```
-
-# CI/CD Integration
+#### CI/CD Integration with Github Actions, GitLab CI, and Jenkins
 
 **GitHub Actions**
 
@@ -274,58 +193,8 @@ pipeline {
 
 ---
 
-# Project Configuration
+### Disclaimer
+Sentinel is an aid for code quality and review; it is not intended to determine authorship or replace human judgment. Results are probabilistic and may include false positives.
 
-Sentinel supports a `.sentinel.yaml` config file for persistent settings, so you don't have to pass flags every time.
-
-**Setup:**
-```bash
-cp .sentinel.example.yaml .sentinel.yaml
-```
-
-Sentinel automatically loads `.sentinel.yaml` from the current directory or `$HOME`.
-
-**Example `.sentinel.yaml`:**
-
-```yaml
-# Detection threshold (0.0 - 1.0)
-# Files scoring above this value are flagged for review.
-threshold: 0.70
-
-# Languages to scan (leave empty to scan all supported languages)
-languages:
-  - python
-  - java
-  - javascript
-  - typescript
-  - go
-
-# Paths to exclude from scanning (glob patterns supported)
-exclude:
-  - "vendor/*"
-  - "node_modules/*"
-  - ".git/*"
-  - "*.min.js"
-  - "*.test.js"
-  - "*.spec.py"
-  - "*_test.go"
-  - "dist/*"
-  - "build/*"
-
-# Verbose output (show detailed signal breakdown per file)
-verbose: false
-
-# JSON output format (useful for CI/CD pipelines)
-json: false
-
-# Fail build if any file exceeds the threshold
-fail_on_detection: true
-```
-
-> CLI flags always take precedence over config file values.
-
----
-
-# License
-
+### License
 MIT License - see [LICENSE](LICENSE) file for details.
